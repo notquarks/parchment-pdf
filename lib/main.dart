@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pdf_tools/components/FlexibleSpaceM3.dart';
 import 'package:pdf_tools/components/ItemCard.dart';
 import 'package:pdf_tools/screen/files_screen.dart';
 import 'package:pdf_tools/screen/merge_screen.dart';
@@ -99,20 +100,64 @@ class HomeScreen extends StatelessWidget {
         SliverAppBar(
           expandedHeight: 150.0,
           pinned: true,
-          flexibleSpace: FlexibleSpaceBar(
-            title: Text(title),
-            centerTitle: false,
+          flexibleSpace: FlexibleSpaceM3(title: title),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.all(4.0),
+          sliver: SliverGrid(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+            ),
+            delegate: SliverChildListDelegate([
+              ItemCard(
+                title: 'Merge',
+                subtitle: 'Combine multiple pdf`s into one.',
+                icon: Icon(Icons.merge, size: 28),
+                onTap: () => Navigator.pushNamed(context, '/merge'),
+              ),
+              ItemCard(
+                title: 'Split',
+                subtitle: 'Extract pages or split docs.',
+                icon: Icon(Icons.insert_page_break_outlined, size: 28),
+                onTap: () => Navigator.pushNamed(context, '/split'),
+              ),
+              ItemCard(
+                title: 'Compress',
+                subtitle: 'Reduce file size quickly.',
+                icon: Icon(Icons.compress_outlined, size: 28),
+                onTap: () => Navigator.pushNamed(context, '/compress'),
+              ),
+              ItemCard(
+                title: 'Edit',
+                subtitle: 'Modify pdf file.',
+                icon: Icon(Icons.edit_note_outlined, size: 28),
+                onTap: () => Navigator.pushNamed(context, '/edit'),
+              ),
+            ]),
           ),
         ),
-        SliverList(
-          delegate: SliverChildBuilderDelegate(
-            (context, index) => ItemCard(
-              title: 'Merge',
-              subtitle: 'Combine multiple pdf`s into one.',
-              icon: Icon(Icons.merge),
-              onTap: () => Navigator.pushNamed(context, '/merge'),
+        SliverToBoxAdapter(
+          child: ListTile(
+            title: const Text('Recent Files'),
+            trailing: TextButton(
+              onPressed: () {},
+              child: const Text("View All"),
             ),
-            childCount: 20,
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 4.0),
+          sliver: SliverList.separated(
+            itemCount: 20,
+            separatorBuilder: (context, index) => const SizedBox(height: 4),
+            itemBuilder: (context, index) {
+              return ItemCard(
+                title: 'Tes ${index}',
+                icon: const Icon(Icons.insert_drive_file),
+                subtitle: "Date Time",
+                onTap: () {},
+              );
+            },
           ),
         ),
       ],
