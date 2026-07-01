@@ -4,4 +4,19 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- required from API level 33 -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" /> <!-- To read images created by other apps -->
+
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+    android:maxSdkVersion="32" />
+
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+    android:maxSdkVersion="29" />
+
+    <application android:requestLegacyExternalStorage="true">
+    <!-- Need for API level 29. Scoped Storage has some issue in Android 10. So, google recommanded to add this. -->
+    <!-- Read more from here: https://developer.android.com/training/data-storage/shared/media#access-other-apps-files-->
+    </application>
 </manifest>

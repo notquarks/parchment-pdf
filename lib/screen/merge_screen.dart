@@ -2,8 +2,11 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf_manipulator/pdf_manipulator.dart';
+import 'package:pdf_tools/screen/result_screen.dart';
 import 'package:pdf_tools/util/pdf.dart';
 import 'package:pdf_tools/util/string_util.dart';
 
@@ -47,28 +50,49 @@ class _MergeScreenState extends State<MergeScreen> {
   Future<void> _mergeFiles() async {
     final pdf = Pdf();
     final output = MemorySink();
-    final data = _selectedFiles
-        .map((element) => MemorySource(element.file.readAsBytesSync()))
-        .toList();
-    await pdf.merge(data, output);
+    final sources = await Future.wait(
+      _selectedFiles.map((f) async => MemorySource(await f.file.readAsBytes())),
+    );
+    await pdf.merge(sources, output);
 
     final mergedBytes = output.takeBytes();
-    final savePath = await FilePicker.saveFile(
-      fileName: 'merged.pdf',
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
-      bytes: mergedBytes,
-    );
+
+    final savedName =
+        '${p.basenameWithoutExtension(_selectedFiles.first.file.path)}_merged_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
+
+    String? downloadPath;
+    if (Platform.isAndroid) {
+      downloadPath = '/storage/emulated/0/Download';
+    } else if (Platform.isIOS) {
+      final dir = await getApplicationDocumentsDirectory();
+      downloadPath = dir.path;
+    } else {
+      final dir = await getDownloadsDirectory();
+      downloadPath = dir?.path;
+    }
+
+    if (downloadPath == null) return;
+
+    final saveDir = Directory(downloadPath);
+    if (!await saveDir.exists()) {
+      await saveDir.create(recursive: true);
+    }
+
+    final saveFile = File('${saveDir.path}/$savedName');
+    await saveFile.writeAsBytes(mergedBytes);
 
     if (!mounted) return;
 
-    if (savePath != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('PDF merged successfully!')));
-    }
-    setState(() => _selectedFiles.clear());
-    Navigator.pop(context);
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ResultScreen(
+          taskTitle: 'Merge',
+          fileCount: _selectedFiles.length,
+          fileName: savedName,
+        ),
+      ),
+    );
   }
 
   @override
