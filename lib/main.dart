@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:m3e_core/m3e_core.dart';
 import 'package:pdf_tools/components/FlexibleSpaceM3.dart';
 import 'package:pdf_tools/components/ItemCard.dart';
 import 'package:pdf_tools/screen/files_screen.dart';
@@ -38,6 +39,7 @@ class MyApp extends StatelessWidget {
       routes: {
         '/': (context) => const MainScreen(),
         '/merge': (context) => const MergeScreen(),
+        '/settings': (context) => const SettingsScreen(),
       },
     );
   }
@@ -101,6 +103,12 @@ class HomeScreen extends StatelessWidget {
           expandedHeight: 150.0,
           pinned: true,
           flexibleSpace: FlexibleSpaceM3(title: title),
+          actions: [
+            M3ETextButton(
+              onPressed: () => Navigator.pushNamed(context, '/settings'),
+              child: Icon(Icons.settings),
+            ),
+          ],
         ),
         SliverPadding(
           padding: const EdgeInsets.all(4.0),
@@ -149,7 +157,7 @@ class HomeScreen extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 4.0),
           sliver: SliverList.separated(
             itemCount: 20,
-            separatorBuilder: (context, index) => const SizedBox(height: 4),
+            separatorBuilder: (context, index) => const SizedBox(height: 1),
             itemBuilder: (context, index) {
               return ItemCard(
                 title: 'Tes ${index}',
