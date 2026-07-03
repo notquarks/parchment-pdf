@@ -9,3 +9,6 @@ Future<int> getPageCount(Uint8List bytes) async {
   await doc.dispose();
   return count;
 }
+
+Future<int> getPageCountIsolate(Uint8List bytes) =>
+    compute(getPageCount, bytes);

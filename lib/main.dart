@@ -1,46 +1,105 @@
 import 'package:flutter/material.dart';
 import 'package:m3e_core/m3e_core.dart';
-import 'package:pdf_tools/components/FlexibleSpaceM3.dart';
-import 'package:pdf_tools/components/ItemCard.dart';
+import 'package:pdf_tools/components/item_card.dart';
+import 'package:pdf_tools/components/m3_flex_space.dart';
 import 'package:pdf_tools/screen/files_screen.dart';
 import 'package:pdf_tools/screen/merge_screen.dart';
+import 'package:pdf_tools/screen/onboarding_screen.dart';
 import 'package:pdf_tools/screen/settings_screen.dart';
 import 'package:pdf_tools/screen/tools_screen.dart';
+import 'package:pdf_tools/services/settings_provider.dart';
+import 'package:pdf_tools/services/settings_service.dart';
+import 'package:pdf_tools/services/theme_notifier.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final settingsService = SettingsService();
+  await settingsService.init();
+
+  final isDark = await settingsService.getDarkMode();
+  final onboardingDone = await settingsService.getOnboardingComplete();
+  final themeNotifier = ThemeNotifier(
+    isDark ? ThemeMode.dark : ThemeMode.light,
+  );
+
+  runApp(
+    MyApp(
+      settingsService: settingsService,
+      themeNotifier: themeNotifier,
+      onboardingDone: onboardingDone,
+    ),
+  );
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MyApp extends StatefulWidget {
+  final SettingsService settingsService;
+  final ThemeNotifier themeNotifier;
+  final bool onboardingDone;
 
-  // This widget is the root of your application.
+  const MyApp({
+    super.key,
+    required this.settingsService,
+    required this.themeNotifier,
+    required this.onboardingDone,
+  });
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late bool _onboardingDone;
+
+  @override
+  void initState() {
+    super.initState();
+    _onboardingDone = widget.onboardingDone;
+    widget.themeNotifier.addListener(_onThemeChanged);
+  }
+
+  void _onThemeChanged() => setState(() {});
+
+  @override
+  void dispose() {
+    widget.themeNotifier.removeListener(_onThemeChanged);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Parchment',
-      themeMode: ThemeMode.dark,
-      theme: ThemeData(
-        brightness: Brightness.light,
-        colorScheme: .fromSeed(
-          seedColor: Colors.white,
+    return SettingsProvider(
+      settingsService: widget.settingsService,
+      themeNotifier: widget.themeNotifier,
+      child: MaterialApp(
+        title: 'Parchment',
+        themeMode: widget.themeNotifier.value,
+        theme: ThemeData(
           brightness: Brightness.light,
+          colorScheme: .fromSeed(
+            seedColor: Colors.orangeAccent,
+            brightness: Brightness.light,
+          ),
         ),
-      ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        colorScheme: .fromSeed(
-          seedColor: Colors.black,
+        darkTheme: ThemeData(
           brightness: Brightness.dark,
+          colorScheme: .fromSeed(
+            seedColor: Colors.orangeAccent,
+            brightness: Brightness.dark,
+          ),
         ),
+        home: _onboardingDone
+            ? const MainScreen()
+            : _OnboardingGate(
+                settingsService: widget.settingsService,
+                themeNotifier: widget.themeNotifier,
+                onComplete: () => setState(() => _onboardingDone = true),
+              ),
+        routes: {
+          '/merge': (context) => const MergeScreen(),
+          '/settings': (context) => const SettingsScreen(),
+        },
       ),
-      // home: const HomeScreen(title: 'Parchment'),
-      initialRoute: '/',
-      routes: {
-        '/': (context) => const MainScreen(),
-        '/merge': (context) => const MergeScreen(),
-        '/settings': (context) => const SettingsScreen(),
-      },
     );
   }
 }
@@ -155,12 +214,11 @@ class HomeScreen extends StatelessWidget {
         ),
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 4.0),
-          sliver: SliverList.separated(
+          sliver: SliverList.builder(
             itemCount: 20,
-            separatorBuilder: (context, index) => const SizedBox(height: 1),
             itemBuilder: (context, index) {
               return ItemCard(
-                title: 'Tes ${index}',
+                title: 'Test $index',
                 icon: const Icon(Icons.insert_drive_file),
                 subtitle: "Date Time",
                 onTap: () {},
@@ -169,6 +227,27 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _OnboardingGate extends StatelessWidget {
+  final SettingsService settingsService;
+  final ThemeNotifier themeNotifier;
+  final VoidCallback onComplete;
+
+  const _OnboardingGate({
+    required this.settingsService,
+    required this.themeNotifier,
+    required this.onComplete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OnboardingScreen(
+      settingsService: settingsService,
+      themeNotifier: themeNotifier,
+      onComplete: onComplete,
     );
   }
 }
