@@ -1,26 +1,19 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf_manipulator/pdf_manipulator.dart';
 import 'package:pdf_tools/screen/result_screen.dart';
 import 'package:pdf_tools/services/settings_provider.dart';
 import 'package:pdf_tools/util/pdf.dart';
+import 'package:pdf_tools/util/snackbar.dart';
 import 'package:pdf_tools/util/string_util.dart';
-import 'package:progress_indicator_m3e/progress_indicator_m3e.dart';
 
+import '../components/action_bottom_bar.dart';
 import '../components/item_card.dart';
-
-class SelectedFile {
-  SelectedFile(this.file, this.pageCount, this.sizeBytes);
-  final File file;
-  final int pageCount;
-  final int sizeBytes;
-}
 
 class MergeScreen extends StatefulWidget {
   const MergeScreen({super.key});
@@ -29,42 +22,30 @@ class MergeScreen extends StatefulWidget {
 }
 
 class _MergeScreenState extends State<MergeScreen> {
-  final List<SelectedFile> _selectedFiles = [];
+  final List<PickedPdfInfo> _selectedFiles = [];
   bool _loading = false;
 
   Future<void> _pickFiles() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
-    );
-
-    if (result == null) return;
     if (!mounted) return;
-    setState(() => _loading = true);
 
     try {
-      final picked = await Future.wait(
-        result.files.map((f) async {
-          final fileInst = File(f.path!);
-          final bytes = await fileInst.readAsBytes();
-          final pages = await compute(getPageCount, bytes);
-          return SelectedFile(fileInst, pages, bytes.length);
-        }),
-      );
+      final files = await pickPdfFiles(allowMultiple: true);
       if (!mounted) return;
+      if (files.isEmpty) return;
+
+      setState(() => _loading = true);
+
+      final result = await processPdfFiles(files);
+      if (!mounted) return;
+
       setState(() {
-        _selectedFiles.addAll(picked);
+        _selectedFiles.addAll(result);
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to load files: $e'),
-          duration: const Duration(seconds: 4),
-        ),
-      );
+      showErrorSnackBar(context, 'Failed to load files: $e');
     }
   }
 
@@ -151,54 +132,70 @@ class _MergeScreenState extends State<MergeScreen> {
     );
   }
 
-  Widget? _floatingBtn() => _selectedFiles.isEmpty
-      ? M3EButton.icon(
-          onPressed: _pickFiles,
-          icon: Icon(Icons.add),
-          label: Text('Add Documents'),
-        )
-      : null;
+  Widget _noDocs(context) {
+    final shortest = MediaQuery.of(context).size.shortestSide;
+    return Column(
+      mainAxisSize: .max,
+      crossAxisAlignment: .center,
+      mainAxisAlignment: .center,
+      children: [
+        SizedBox(
+          width: shortest * 0.6,
+          height: shortest * 0.6,
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: _loading
+                ? SizedBox(
+                    width: shortest * 0.2,
+                    height: shortest * 0.2,
+                    child: LoadingIndicatorM3E(
+                      variant: LoadingIndicatorM3EVariant.contained,
+                    ),
+                  )
+                : InkWell(
+                    onTap: _pickFiles,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Column(
+                      mainAxisAlignment: .center,
+                      mainAxisSize: .max,
+                      spacing: 12,
+                      children: [
+                        Text(
+                          'Select Documents',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        M3EContainer.pill(
+                          width: shortest * 0.4,
+                          height: shortest * 0.4,
+                          color: Theme.of(context).colorScheme.primaryContainer,
+                          child: Icon(Icons.playlist_add, size: shortest * 0.2),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget? _bottomBar(BuildContext context) {
     if (_selectedFiles.isEmpty) return null;
-    return BottomAppBar(
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'Estimated Size',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              Text(
-                '~ ${formatBytes(_estimatedSize, 2)}',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-              ),
-            ],
-          ),
-          Row(
-            spacing: 8,
-            children: [
-              M3EFilledButton.tonal(
-                shape: .square,
-                onPressed: _pickFiles,
-                child: Icon(Icons.add),
-              ),
-              M3EButton.icon(
-                onPressed: _startMerge,
-                icon: Icon(Icons.merge),
-                label: Text("Merge Documents"),
-              ),
-            ],
-          ),
-        ],
-      ),
+    return ActionBottomBar(
+      label: 'Estimated Size',
+      value: '~ ${formatBytes(_estimatedSize, 2)}',
+      actions: [
+        M3EFilledButton.tonal(
+          shape: .square,
+          onPressed: _pickFiles,
+          child: const Icon(Icons.add),
+        ),
+        M3EButton.icon(
+          onPressed: _startMerge,
+          icon: const Icon(Icons.merge),
+          label: const Text('Merge'),
+        ),
+      ],
     );
   }
 
@@ -208,36 +205,30 @@ class _MergeScreenState extends State<MergeScreen> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
+            floating: true,
             title: Text("Merge"),
-            bottom: _loading
-                ? PreferredSize(
-                    preferredSize: const Size.fromHeight(4),
-                    child: const LinearProgressIndicatorM3E(
-                      size: .s,
-                      shape: .wavy,
-                      inset: 2.0,
-                    ),
-                  )
-                : null,
+            backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
           ),
-          SliverToBoxAdapter(
-            child: ListTile(
-              title: Text("${_selectedFiles.length} files selected"),
+          if (_selectedFiles.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: ListTile(
+                title: Text("${_selectedFiles.length} files selected"),
+              ),
             ),
-          ),
-          SliverReorderableList(
-            itemCount: _selectedFiles.length,
-            onReorderItem: (oldIndex, newIndex) {
-              setState(() {
-                final element = _selectedFiles.removeAt(oldIndex);
-                _selectedFiles.insert(newIndex, element);
-              });
-            },
-            itemBuilder: _buildFileItem,
-          ),
+            SliverReorderableList(
+              itemCount: _selectedFiles.length,
+              onReorderItem: (oldIndex, newIndex) {
+                setState(() {
+                  final element = _selectedFiles.removeAt(oldIndex);
+                  _selectedFiles.insert(newIndex, element);
+                });
+              },
+              itemBuilder: _buildFileItem,
+            ),
+          ] else
+            SliverFillRemaining(child: _noDocs(context)),
         ],
       ),
-      floatingActionButton: _floatingBtn(),
       bottomNavigationBar: _bottomBar(context),
     );
   }

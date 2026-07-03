@@ -6,6 +6,7 @@ import 'package:pdf_tools/screen/files_screen.dart';
 import 'package:pdf_tools/screen/merge_screen.dart';
 import 'package:pdf_tools/screen/onboarding_screen.dart';
 import 'package:pdf_tools/screen/settings_screen.dart';
+import 'package:pdf_tools/screen/split_screen.dart';
 import 'package:pdf_tools/screen/tools_screen.dart';
 import 'package:pdf_tools/services/settings_provider.dart';
 import 'package:pdf_tools/services/settings_service.dart';
@@ -97,6 +98,7 @@ class _MyAppState extends State<MyApp> {
               ),
         routes: {
           '/merge': (context) => const MergeScreen(),
+          '/split': (context) => const SplitScreen(),
           '/settings': (context) => const SettingsScreen(),
         },
       ),
