@@ -1,11 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:m3e_core/m3e_core.dart';
 
 import '../components/action_bottom_bar.dart';
 import '../util/pdf.dart';
+import '../util/pdf_pick_controller.dart';
 import '../util/snackbar.dart';
 
 class SplitScreen extends StatefulWidget {
@@ -18,35 +18,30 @@ class SplitScreen extends StatefulWidget {
 class _SplitScreenState extends State<SplitScreen> {
   File? _filePicked;
   final List<int> _selectedPage = <int>[];
-  int _pageCount = 0;
-  bool _loading = false;
+  int? _pageCount;
+  late final _controller = PdfPickController(
+    isMounted: () => mounted,
+    onEvent: _applyEvent,
+    onError: (msg) => showErrorSnackBar(context, msg),
+  );
 
-  Future<void> _pickFile() async {
-    if (!mounted) return;
-
-    try {
-      final files = await pickPdfFiles();
-      if (!mounted) return;
-      if (files.isEmpty) return;
-
-      setState(() => _loading = true);
-
-      final result = await processPdfFiles(files);
-      if (!mounted) return;
-
-      setState(() {
-        _filePicked = result.first.file;
-        _pageCount = result.first.pageCount;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _loading = false);
-      showErrorSnackBar(context, 'Failed to load file: $e');
+  void _applyEvent(PdfFileEvent event) {
+    switch (event) {
+      case PdfFileAdded(:final info):
+        setState(() {
+          _filePicked = info.file;
+          _pageCount = null;
+        });
+      case PdfFileResolved(:final info):
+        setState(() => _pageCount = info.pageCount);
+      case PdfFileFailed(:final error):
+        showErrorSnackBar(context, '${error.fileName}: ${error.error}');
     }
   }
 
-  Widget _noDocs(context) {
+  Future<void> _pickFile() => _controller.pickAndProcess(allowMultiple: false, failurePrefix: 'Failed to load file');
+
+  Widget _noDocs(BuildContext context) {
     final shortest = MediaQuery.of(context).size.shortestSide;
     return Column(
       mainAxisSize: .max,
@@ -58,62 +53,56 @@ class _SplitScreenState extends State<SplitScreen> {
           height: shortest * 0.6,
           child: AspectRatio(
             aspectRatio: 1,
-            child: _loading
-                ? SizedBox(
-                    width: shortest * 0.2,
-                    height: shortest * 0.2,
-                    child: LoadingIndicatorM3E(
-                      variant: LoadingIndicatorM3EVariant.contained,
-                    ),
-                  )
-                : InkWell(
-                    onTap: _pickFile,
-                    borderRadius: BorderRadius.circular(16),
-                    child: Column(
-                      mainAxisAlignment: .center,
-                      mainAxisSize: .max,
-                      spacing: 12,
-                      children: [
-                        Text(
-                          'Select a Document',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        M3EContainer.pill(
-                          width: shortest * 0.4,
-                          height: shortest * 0.4,
-                          color: Theme.of(context).colorScheme.primaryContainer,
-                          child: Icon(
-                            Icons.insert_drive_file,
-                            size: shortest * 0.2,
-                          ),
-                        ),
-                      ],
-                    ),
+            child: InkWell(
+              onTap: _pickFile,
+              borderRadius: BorderRadius.circular(16),
+              child: Column(
+                mainAxisAlignment: .center,
+                mainAxisSize: .max,
+                spacing: 12,
+                children: [
+                  Text(
+                    'Select a Document',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
+                  M3EContainer.pill(
+                    width: shortest * 0.4,
+                    height: shortest * 0.4,
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    child: Icon(Icons.insert_drive_file, size: shortest * 0.2),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ],
     );
   }
 
-  bool get _allSelected => _selectedPage.length == _pageCount && _pageCount > 0;
+  bool get _allSelected =>
+      _pageCount != null &&
+      _selectedPage.length == _pageCount &&
+      _pageCount! > 0;
 
   void _toggleSelectAll() {
+    if (_pageCount == null) return;
     setState(() {
       if (_allSelected) {
         _selectedPage.clear();
       } else {
         _selectedPage
           ..clear()
-          ..addAll(List.generate(_pageCount, (i) => i + 1));
+          ..addAll(List.generate(_pageCount!, (i) => i + 1));
       }
     });
   }
 
   void _invertSelection() {
+    if (_pageCount == null) return;
     setState(() {
       final inverted = List.generate(
-        _pageCount,
+        _pageCount!,
         (i) => i + 1,
       ).where((p) => !_selectedPage.contains(p)).toList();
       _selectedPage
@@ -123,6 +112,7 @@ class _SplitScreenState extends State<SplitScreen> {
   }
 
   Future<void> _inputPageRange() async {
+    if (_pageCount == null) return;
     final controller = TextEditingController();
     final result = await showDialog<List<int>>(
       context: context,
@@ -141,7 +131,7 @@ class _SplitScreenState extends State<SplitScreen> {
           ),
           FilledButton(
             onPressed: () {
-              final pages = _parsePageRange(controller.text, _pageCount);
+              final pages = _parsePageRange(controller.text, _pageCount!);
               Navigator.pop(context, pages);
             },
             child: const Text('OK'),
@@ -241,11 +231,13 @@ class _SplitScreenState extends State<SplitScreen> {
     if (_filePicked == null) return null;
     return ActionBottomBar(
       label: 'Selected Pages',
-      value: '${_selectedPage.length} of $_pageCount',
+      value: _pageCount != null
+          ? '${_selectedPage.length} of $_pageCount'
+          : 'Loading…',
       actions: [
         M3EFilledButton.tonal(
           shape: .square,
-          onPressed: _showShortcut,
+          onPressed: _pageCount != null ? _showShortcut : null,
           child: const Icon(Icons.handyman),
         ),
         M3EButton.icon(

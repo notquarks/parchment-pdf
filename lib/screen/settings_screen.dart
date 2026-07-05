@@ -1,6 +1,3 @@
-import 'dart:io';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:pdf_tools/screen/onboarding_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:m3e_core/m3e_core.dart';
@@ -9,7 +6,7 @@ import 'package:pdf_tools/components/m3_flex_space.dart';
 import 'package:pdf_tools/services/settings_provider.dart';
 import 'package:pdf_tools/services/settings_service.dart';
 import 'package:pdf_tools/services/theme_notifier.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:pdf_tools/util/storage_helper.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -62,28 +59,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _pickSavePath() async {
-    await _ensureStoragePermission();
+    final granted = await StorageHelper.ensureStoragePermission();
+    if (!granted) {
+      if (mounted) _showSnack('Storage permission needed to save to custom folders.');
+      return;
+    }
 
-    final path = await FilePicker.getDirectoryPath(
-      dialogTitle: 'Select Save Location',
-    );
+    final path = await StorageHelper.pickFolder();
     if (path == null || !mounted) return;
 
     if (await _settingsService.setSavePath(path)) {
       setState(() => _savePath = path);
     } else {
       _showSnack('Cannot write to selected folder. Choose another.');
-    }
-  }
-
-  Future<void> _ensureStoragePermission() async {
-    if (!Platform.isAndroid) return;
-    final status = await Permission.manageExternalStorage.status;
-    if (status.isGranted) return;
-
-    final result = await Permission.manageExternalStorage.request();
-    if (!result.isGranted && mounted) {
-      _showSnack('Storage permission needed to save to custom folders.');
     }
   }
 

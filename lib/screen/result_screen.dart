@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:pdf_manipulator/pdf_manipulator.dart';
 import 'package:share_plus/share_plus.dart';
 
 class ResultScreen extends StatefulWidget {
@@ -14,6 +15,7 @@ class ResultScreen extends StatefulWidget {
     this.filePath,
     this.fileName,
     this.mergeFuture,
+    this.onCancel,
   });
 
   final String taskTitle;
@@ -21,6 +23,7 @@ class ResultScreen extends StatefulWidget {
   final String? filePath;
   final String? fileName;
   final Future<String>? mergeFuture;
+  final Future<void> Function()? onCancel;
 
   @override
   State<ResultScreen> createState() => _ResultScreenState();
@@ -31,6 +34,7 @@ class _ResultScreenState extends State<ResultScreen> {
   String? _fileName;
   bool _completed = false;
   String? _error;
+  bool _cancelled = false;
 
   @override
   void initState() {
@@ -45,17 +49,25 @@ class _ResultScreenState extends State<ResultScreen> {
   }
 
   void _listenToFuture(Future<String> future) {
-    future.then((path) {
-      if (!mounted) return;
-      setState(() {
-        _filePath = path;
-        _fileName = path.split(Platform.pathSeparator).last;
-        _completed = true;
-      });
-    }).catchError((e) {
-      if (!mounted) return;
-      setState(() => _error = e.toString());
+    future.then(_onSuccess).catchError(_onError);
+  }
+
+  void _onSuccess(String path) {
+    if (!mounted) return;
+    setState(() {
+      _filePath = path;
+      _fileName = path.split(Platform.pathSeparator).last;
+      _completed = true;
     });
+  }
+
+  void _onError(Object e) {
+    if (!mounted) return;
+    if (e is PdfCancelled) {
+      setState(() => _cancelled = true);
+    } else {
+      setState(() => _error = e.toString());
+    }
   }
 
   @override
@@ -75,40 +87,7 @@ class _ResultScreenState extends State<ResultScreen> {
                   padding: const EdgeInsets.all(18.0),
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 250),
-                    child: _error != null
-                        ? KeyedSubtree(
-                            key: const ValueKey('error'),
-                            child: M3EContainer.verySunny(
-                              color: Theme.of(context).colorScheme.errorContainer,
-                              width: shortest * 0.6,
-                              height: shortest * 0.6,
-                              child: Icon(
-                                Icons.error_outline,
-                                size: shortest * 0.3,
-                                color: Theme.of(context).colorScheme.error,
-                              ),
-                            ),
-                          )
-                        : _completed
-                            ? KeyedSubtree(
-                                key: const ValueKey('success'),
-                                child: M3EContainer.verySunny(
-                                  color: Theme.of(context).colorScheme.primaryContainer,
-                                  width: shortest * 0.6,
-                                  height: shortest * 0.6,
-                                  child: Icon(Icons.check, size: shortest * 0.3),
-                                ),
-                              )
-                            : KeyedSubtree(
-                                key: const ValueKey('loading'),
-                                child: SizedBox(
-                                  width: shortest * 0.6,
-                                  height: shortest * 0.6,
-                                  child: LoadingIndicatorM3E(
-                                    variant: LoadingIndicatorM3EVariant.contained,
-                                  ),
-                                ),
-                              ),
+                    child: _statusIndicator(shortest),
                   ),
                 ),
                 Padding(
@@ -142,11 +121,7 @@ class _ResultScreenState extends State<ResultScreen> {
                       Padding(
                         padding: const EdgeInsets.all(12.0),
                         child: Text(
-                          _error != null
-                              ? 'Merge failed'
-                              : _completed
-                              ? 'Successfully ${widget.taskTitle}d!'
-                              : 'Merging…',
+                          _statusMessage,
                           style: Theme.of(context).textTheme.displaySmall,
                           softWrap: true,
                           maxLines: 2,
@@ -162,43 +137,147 @@ class _ResultScreenState extends State<ResultScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: (_completed && _filePath != null) || _error != null
-          ? Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.max,
-                spacing: 8.0,
-                children: [
-                  M3EFilledButton.tonalIcon(
-                    size: M3EButtonSize.md,
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    icon: Icon(Icons.arrow_back),
-                    label: Text('Back'),
-                  ),
-                  if (_filePath != null) ...[
-                    M3EFilledButton.icon(
-                      size: M3EButtonSize.md,
-                      onPressed: () => SharePlus.instance.share(
-                        ShareParams(files: [XFile(_filePath!)]),
-                      ),
-                      icon: Icon(Icons.share),
-                      label: Text('Share'),
-                    ),
-                    Expanded(
-                      child: M3EFilledButton(
-                        size: M3EButtonSize.md,
-                        onPressed: () => OpenFilex.open(_filePath!),
-                        child: Text('Open'),
-                      ),
-                    ),
-                  ],
-                ],
+      bottomNavigationBar: _bottomBar(),
+    );
+  }
+
+  Widget _statusIndicator(double shortest) {
+    if (_cancelled) {
+      return _statusBox(
+        key: 'cancelled',
+        color: Theme.of(context).colorScheme.secondaryContainer,
+        icon: Icons.cancel_outlined,
+        iconColor: Theme.of(context).colorScheme.secondary,
+        shortest: shortest,
+      );
+    }
+    if (_error != null) {
+      return _statusBox(
+        key: 'error',
+        color: Theme.of(context).colorScheme.errorContainer,
+        icon: Icons.error_outline,
+        iconColor: Theme.of(context).colorScheme.error,
+        shortest: shortest,
+      );
+    }
+    if (_completed) {
+      return _statusBox(
+        key: 'success',
+        color: Theme.of(context).colorScheme.primaryContainer,
+        icon: Icons.check,
+        iconColor: null,
+        shortest: shortest,
+      );
+    }
+    return KeyedSubtree(
+      key: const ValueKey('loading'),
+      child: SizedBox(
+        width: shortest * 0.6,
+        height: shortest * 0.6,
+        child: LoadingIndicatorM3E(
+          variant: LoadingIndicatorM3EVariant.contained,
+        ),
+      ),
+    );
+  }
+
+  Widget _statusBox({
+    required String key,
+    required Color color,
+    required IconData icon,
+    required double shortest,
+    Color? iconColor,
+  }) {
+    return KeyedSubtree(
+      key: ValueKey(key),
+      child: M3EContainer.verySunny(
+        color: color,
+        width: shortest * 0.6,
+        height: shortest * 0.6,
+        child: Icon(icon, size: shortest * 0.3, color: iconColor),
+      ),
+    );
+  }
+
+  String get _statusMessage {
+    if (_cancelled) return 'Cancelled';
+    if (_error != null) return '${widget.taskTitle} failed';
+    if (_completed) return 'Successfully ${widget.taskTitle}d!';
+    return 'Merging…';
+  }
+
+  Widget? _bottomBar() {
+    if ((_completed && _filePath != null) || _error != null) {
+      return _resultActionsBar();
+    }
+    if (_cancelled || widget.onCancel != null) {
+      return _cancelBar();
+    }
+    return null;
+  }
+
+  Widget _resultActionsBar() {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.max,
+        spacing: 8.0,
+        children: [
+          M3EFilledButton.tonalIcon(
+            size: M3EButtonSize.md,
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            icon: Icon(Icons.arrow_back),
+            label: Text('Back'),
+          ),
+          if (_filePath != null) ...[
+            M3EFilledButton.icon(
+              size: M3EButtonSize.md,
+              onPressed: () => SharePlus.instance.share(
+                ShareParams(files: [XFile(_filePath!)]),
               ),
-            )
-          : null,
+              icon: Icon(Icons.share),
+              label: Text('Share'),
+            ),
+            Expanded(
+              child: M3EFilledButton(
+                size: M3EButtonSize.md,
+                onPressed: () => OpenFilex.open(_filePath!),
+                child: Text('Open'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _cancelBar() {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Row(
+        children: [
+          Expanded(
+            child: M3EFilledButton(
+              decoration: M3EButtonDecoration.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.errorContainer,
+              ),
+              size: M3EButtonSize.md,
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text(
+                'Back',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

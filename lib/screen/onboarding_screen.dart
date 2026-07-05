@@ -1,10 +1,9 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf_tools/services/settings_service.dart';
 import 'package:pdf_tools/services/theme_notifier.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:pdf_tools/util/storage_helper.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final SettingsService settingsService;
@@ -42,8 +41,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _darkMode = await widget.settingsService.getDarkMode();
     _savePath = await widget.settingsService.getSavePath();
     if (Platform.isAndroid) {
-      _permissionGranted =
-          await Permission.manageExternalStorage.status.isGranted;
+      _permissionGranted = await StorageHelper.isStoragePermissionGranted();
     }
     if (mounted) setState(() {});
   }
@@ -76,19 +74,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _pickFolder() async {
-    final path = await FilePicker.getDirectoryPath(
-      dialogTitle: 'Select Save Location',
-    );
+    final path = await StorageHelper.pickFolder();
     if (path != null && mounted) {
       setState(() => _savePath = path);
     }
   }
 
   Future<void> _requestPermission() async {
-    if (!Platform.isAndroid) return;
-    final result = await Permission.manageExternalStorage.request();
+    final granted = await StorageHelper.ensureStoragePermission();
     if (mounted) {
-      setState(() => _permissionGranted = result.isGranted);
+      setState(() => _permissionGranted = granted);
     }
   }
 

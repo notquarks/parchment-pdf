@@ -11,9 +11,12 @@ import 'package:pdf_tools/screen/tools_screen.dart';
 import 'package:pdf_tools/services/settings_provider.dart';
 import 'package:pdf_tools/services/settings_service.dart';
 import 'package:pdf_tools/services/theme_notifier.dart';
+import 'package:pdf_tools/util/pdf.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await PdfService.ensureInitialized();
 
   final settingsService = SettingsService();
   await settingsService.init();
