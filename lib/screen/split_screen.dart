@@ -1,9 +1,20 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:intl/intl.dart';
+import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:m3e_core/m3e_core.dart';
+import 'package:path/path.dart' as p;
+import 'package:pdf_manipulator/io.dart';
+import 'package:pdf_manipulator/pdf_manipulator.dart';
+import 'package:pdfrx/pdfrx.dart';
+import 'package:pdf_tools/components/page_small_preview.dart';
 
 import '../components/action_bottom_bar.dart';
+import '../model/task_messages.dart';
+import '../screen/result_screen.dart';
+import '../services/settings_provider.dart';
 import '../util/pdf.dart';
 import '../util/pdf_pick_controller.dart';
 import '../util/snackbar.dart';
@@ -19,6 +30,8 @@ class _SplitScreenState extends State<SplitScreen> {
   File? _filePicked;
   final List<int> _selectedPage = <int>[];
   int? _pageCount;
+  PdfDocumentRef? _documentRef;
+  VoidCallback? _removeDocListener;
   late final _controller = PdfPickController(
     isMounted: () => mounted,
     onEvent: _applyEvent,
@@ -31,7 +44,9 @@ class _SplitScreenState extends State<SplitScreen> {
         setState(() {
           _filePicked = info.file;
           _pageCount = null;
+          _selectedPage.clear();
         });
+        _preloadDocument(info.file.path);
       case PdfFileResolved(:final info):
         setState(() => _pageCount = info.pageCount);
       case PdfFileFailed(:final error):
@@ -39,45 +54,34 @@ class _SplitScreenState extends State<SplitScreen> {
     }
   }
 
-  Future<void> _pickFile() => _controller.pickAndProcess(allowMultiple: false, failurePrefix: 'Failed to load file');
+  void _preloadDocument(String path) {
+    _removeDocListener?.call();
+    _documentRef = PdfDocumentRefFile(path);
+    final listenable = _documentRef!.resolveListenable();
+    _removeDocListener = listenable.addListener(() {});
+    listenable.load();
+  }
 
-  Widget _noDocs(BuildContext context) {
-    final shortest = MediaQuery.of(context).size.shortestSide;
-    return Column(
-      mainAxisSize: .max,
-      crossAxisAlignment: .center,
-      mainAxisAlignment: .center,
-      children: [
-        SizedBox(
-          width: shortest * 0.6,
-          height: shortest * 0.6,
-          child: AspectRatio(
-            aspectRatio: 1,
-            child: InkWell(
-              onTap: _pickFile,
-              borderRadius: BorderRadius.circular(16),
-              child: Column(
-                mainAxisAlignment: .center,
-                mainAxisSize: .max,
-                spacing: 12,
-                children: [
-                  Text(
-                    'Select a Document',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  M3EContainer.pill(
-                    width: shortest * 0.4,
-                    height: shortest * 0.4,
-                    color: Theme.of(context).colorScheme.primaryContainer,
-                    child: Icon(Icons.insert_drive_file, size: shortest * 0.2),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
+  @override
+  void dispose() {
+    _removeDocListener?.call();
+    super.dispose();
+  }
+
+  Future<void> _pickFile() => _controller.pickAndProcess(
+    allowMultiple: false,
+    failurePrefix: 'Failed to load file',
+  );
+
+  void _togglePage(int page) {
+    setState(() {
+      if (_selectedPage.contains(page)) {
+        _selectedPage.remove(page);
+      } else {
+        _selectedPage.add(page);
+      }
+      _selectedPage.sort();
+    });
   }
 
   bool get _allSelected =>
@@ -149,29 +153,33 @@ class _SplitScreenState extends State<SplitScreen> {
   }
 
   List<int> _parsePageRange(String input, int max) {
-    return input
-        .split(',')
-        .expand((part) => _parsePageRangePart(part.trim(), max))
-        .toSet()
-        .toList()
-      ..sort();
+    final result = <int>{};
+    for (final part in input.split(',')) {
+      result.addAll(_parsePageRangePart(part.trim(), max));
+    }
+    return result.toList()..sort();
   }
 
-  Iterable<int> _parsePageRangePart(String part, int max) sync* {
-    if (part.isEmpty) return;
+  List<int> _parsePageRangePart(String part, int max) {
+    if (part.isEmpty) return [];
+
     if (part.contains('-')) {
       final bounds = part.split('-');
-      if (bounds.length != 2) return;
+      if (bounds.length != 2) return [];
       final start = int.tryParse(bounds[0].trim());
       final end = int.tryParse(bounds[1].trim());
-      if (start == null || end == null) return;
+      if (start == null || end == null) return [];
+
+      final result = <int>[];
       for (var i = start.clamp(1, max); i <= end.clamp(1, max); i++) {
-        yield i;
+        result.add(i);
       }
-    } else {
-      final n = int.tryParse(part);
-      if (n != null && n >= 1 && n <= max) yield n;
+      return result;
     }
+
+    final n = int.tryParse(part);
+    if (n != null && n >= 1 && n <= max) return [n];
+    return [];
   }
 
   void _showShortcut() {
@@ -227,6 +235,60 @@ class _SplitScreenState extends State<SplitScreen> {
     );
   }
 
+  Future<void> _doSplit() async {
+    if (_filePicked == null || _selectedPage.isEmpty) return;
+
+    final settingsService = SettingsProvider.of(context).settingsService;
+    final pdf = Pdf();
+
+    final savedName =
+        '${p.basenameWithoutExtension(_filePicked!.path)}_split_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
+
+    final downloadPath = await settingsService.getSavePath();
+
+    final saveDir = Directory(downloadPath);
+    if (!await saveDir.exists()) {
+      await saveDir.create(recursive: true);
+    }
+
+    final saveFile = File('${saveDir.path}/$savedName');
+    final output = await FileSink.create(saveFile);
+    final source = FileSource(_filePicked!);
+
+    try {
+      final mergeFuture = pdf
+          .extractPages(
+            source,
+            output,
+            pages: _selectedPage.map((p) => p - 1).toList(),
+          )
+          .then((_) => saveFile.path)
+          .whenComplete(() async {
+            await output.close();
+            await pdf.dispose();
+          });
+
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ResultScreen(
+            messages: TaskMessages.split,
+            fileCount: _selectedPage.length,
+            mergeFuture: mergeFuture,
+          ),
+        ),
+      );
+    } catch (e) {
+      await output.close();
+      await pdf.dispose();
+      if (mounted) {
+        showErrorSnackBar(context, 'Split failed: $e');
+      }
+    }
+  }
+
   Widget? _bottomBar(BuildContext context) {
     if (_filePicked == null) return null;
     return ActionBottomBar(
@@ -236,12 +298,12 @@ class _SplitScreenState extends State<SplitScreen> {
           : 'Loading…',
       actions: [
         M3EFilledButton.tonal(
-          shape: .square,
+          shape: M3EButtonShape.square,
           onPressed: _pageCount != null ? _showShortcut : null,
           child: const Icon(Icons.handyman),
         ),
         M3EButton.icon(
-          onPressed: () {},
+          onPressed: _selectedPage.isNotEmpty ? _doSplit : null,
           icon: const Icon(Icons.call_split),
           label: const Text('Split'),
         ),
@@ -251,18 +313,65 @@ class _SplitScreenState extends State<SplitScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final shortest = MediaQuery.of(context).size.shortestSide;
     return Scaffold(
       body: CustomScrollView(
+        scrollCacheExtent: ScrollCacheExtent.pixels(600),
         slivers: [
           SliverAppBar(
             floating: true,
-            title: Text("Split"),
+            title: const Text("Split"),
             backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
           ),
-          if (_filePicked != null)
-            SliverToBoxAdapter(
-              child: ListTile(
-                title: Column(children: [Text("Split Documents")]),
+          if (_filePicked != null && _pageCount != null)
+            SliverPadding(
+              padding: const EdgeInsets.all(8),
+              sliver: SliverGrid.builder(
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 160,
+                  childAspectRatio: 0.65,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                ),
+                itemCount: _pageCount,
+                itemBuilder: (context, index) {
+                  final pageNumber = index + 1;
+                  final isSelected = _selectedPage.contains(pageNumber);
+                  return InkWell(
+                    onTap: () => _togglePage(pageNumber),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Expanded(
+                          child: PageSmallPreview(
+                            documentRef: _documentRef!,
+                            pageNumber: pageNumber,
+                            isSelected: isSelected,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Page $pageNumber',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: isSelected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : null,
+                                fontWeight: isSelected ? FontWeight.w600 : null,
+                              ),
+                        ),
+                        const SizedBox(height: 2),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            )
+          else if (_filePicked != null)
+            SliverFillRemaining(
+              child: Center(
+                child: _loadingSpinner(context, shortest: shortest),
               ),
             )
           else
@@ -270,6 +379,53 @@ class _SplitScreenState extends State<SplitScreen> {
         ],
       ),
       bottomNavigationBar: _bottomBar(context),
+    );
+  }
+
+  Widget _noDocs(BuildContext context) {
+    final shortest = MediaQuery.of(context).size.shortestSide;
+    return Column(
+      mainAxisSize: MainAxisSize.max,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: shortest * 0.6,
+          height: shortest * 0.6,
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: InkWell(
+              onTap: _pickFile,
+              borderRadius: BorderRadius.circular(16),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.max,
+                spacing: 12,
+                children: [
+                  Text(
+                    'Select a Document',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  M3EContainer.pill(
+                    width: shortest * 0.4,
+                    height: shortest * 0.4,
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    child: Icon(Icons.insert_drive_file, size: shortest * 0.2),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _loadingSpinner(BuildContext context, {required double shortest}) {
+    return SizedBox(
+      width: shortest * 0.4,
+      height: shortest * 0.4,
+      child: LoadingIndicatorM3E(variant: LoadingIndicatorM3EVariant.contained),
     );
   }
 }

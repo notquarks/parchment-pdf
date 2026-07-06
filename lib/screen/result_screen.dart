@@ -6,11 +6,12 @@ import 'package:m3e_core/m3e_core.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:pdf_manipulator/pdf_manipulator.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:pdf_tools/model/task_messages.dart';
 
 class ResultScreen extends StatefulWidget {
   const ResultScreen({
     super.key,
-    required this.taskTitle,
+    required this.messages,
     required this.fileCount,
     this.filePath,
     this.fileName,
@@ -18,7 +19,7 @@ class ResultScreen extends StatefulWidget {
     this.onCancel,
   });
 
-  final String taskTitle;
+  final TaskMessages messages;
   final int fileCount;
   final String? filePath;
   final String? fileName;
@@ -77,7 +78,7 @@ class _ResultScreenState extends State<ResultScreen> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(title: Text(widget.taskTitle)),
+          SliverAppBar(title: Text(widget.messages.title)),
           SliverFillRemaining(
             hasScrollBody: false,
             child: Column(
@@ -129,6 +130,23 @@ class _ResultScreenState extends State<ResultScreen> {
                           textAlign: TextAlign.center,
                         ),
                       ),
+                      if (_error != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18.0,
+                          ),
+                          child: Text(
+                            _error!,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                            softWrap: true,
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -201,9 +219,9 @@ class _ResultScreenState extends State<ResultScreen> {
 
   String get _statusMessage {
     if (_cancelled) return 'Cancelled';
-    if (_error != null) return '${widget.taskTitle} failed';
-    if (_completed) return 'Successfully ${widget.taskTitle}d!';
-    return 'Merging…';
+    if (_error != null) return widget.messages.failure;
+    if (_completed) return widget.messages.success;
+    return widget.messages.progress;
   }
 
   Widget? _bottomBar() {
@@ -269,7 +287,7 @@ class _ResultScreenState extends State<ResultScreen> {
                 Navigator.pop(context);
               },
               child: Text(
-                'Back',
+                'Cancel',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onErrorContainer,
                 ),

@@ -6,6 +6,7 @@ import 'package:m3e_core/m3e_core.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf_manipulator/io.dart';
 import 'package:pdf_manipulator/pdf_manipulator.dart';
+import 'package:pdf_tools/model/task_messages.dart';
 import 'package:pdf_tools/screen/result_screen.dart';
 import 'package:pdf_tools/services/settings_provider.dart';
 import 'package:pdf_tools/util/pdf.dart';
@@ -73,10 +74,14 @@ class _MergeScreenState extends State<MergeScreen> {
 
     final saveFile = File('${saveDir.path}/$savedName');
     final output = await FileSink.create(saveFile);
+    final totalSize = _selectedFiles.fold<int>(0, (sum, f) => sum + f.sizeBytes);
+    final sw = Stopwatch()..start();
     final task = pdf.merge(sources, output);
     onTaskCreated?.call(task);
     try {
       await task;
+      sw.stop();
+      debugPrint('PDF merge: ${sw.elapsedMilliseconds}ms | ${_selectedFiles.length} files, ${(totalSize / 1024 / 1024).toStringAsFixed(1)}MB total');
     } on PdfCancelled {
       await output.close();
       if (await saveFile.exists()) {
@@ -102,7 +107,7 @@ class _MergeScreenState extends State<MergeScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => ResultScreen(
-          taskTitle: 'Merge',
+          messages: TaskMessages.merge,
           fileCount: _selectedFiles.length,
           mergeFuture: mergeFuture,
           onCancel: () async {

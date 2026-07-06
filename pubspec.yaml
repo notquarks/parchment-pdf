@@ -34,7 +34,9 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.9
-  pdf_manipulator: ^2.1.1
+  pdf_manipulator:
+    path: pdf_manipulator
+  pdfrx: ^2.4.4
   path: ^1.9.1
   file_picker: ^12.0.0-beta.7
   intl: ^0.20.3
