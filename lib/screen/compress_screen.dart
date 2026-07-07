@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf_manipulator/io.dart';
@@ -247,7 +246,7 @@ class _CompressScreenState extends State<CompressScreen> {
               child: AspectRatio(
                 aspectRatio: 0.65,
                 child: Center(
-                  child: LoadingSpinner(context: context, size: 0.4),
+                  child: LoadingSpinner(size: 0.4),
                 ),
               ),
             ),

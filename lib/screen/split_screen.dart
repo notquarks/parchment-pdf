@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:intl/intl.dart';
-import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf_manipulator/io.dart';
@@ -314,7 +313,6 @@ class _SplitScreenState extends State<SplitScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final shortest = MediaQuery.of(context).size.shortestSide;
     return Scaffold(
       body: CustomScrollView(
         scrollCacheExtent: ScrollCacheExtent.pixels(600),
@@ -371,7 +369,7 @@ class _SplitScreenState extends State<SplitScreen> {
             )
           else if (_filePicked != null)
             SliverFillRemaining(
-              child: Center(child: LoadingSpinner(context: context, size: 0.4)),
+              child: Center(child: LoadingSpinner(size: 0.4)),
             )
           else
             SliverFillRemaining(child: _noDocs(context)),

@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:pdf_manipulator/pdf_manipulator.dart';
@@ -188,7 +187,7 @@ class _ResultScreenState extends State<ResultScreen> {
     }
     return KeyedSubtree(
       key: const ValueKey('loading'),
-      child: LoadingSpinner(context: context, size: 0.5),
+      child: LoadingSpinner(size: 0.5),
     );
   }
 
