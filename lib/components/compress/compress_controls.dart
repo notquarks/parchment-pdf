@@ -39,6 +39,7 @@ class CompressControls extends StatelessWidget {
         ),
         Text('Preset', style: Theme.of(context).textTheme.titleMedium),
         Row(
+          mainAxisSize: .max,
           spacing: 8,
           children: [
             QualityPresetButton(

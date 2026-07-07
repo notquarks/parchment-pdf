@@ -5,6 +5,7 @@ import 'package:pdf_tools/screen/merge_screen.dart';
 import 'package:pdf_tools/screen/onboarding_screen.dart';
 import 'package:pdf_tools/screen/settings_screen.dart';
 import 'package:pdf_tools/screen/split_screen.dart';
+import 'package:pdf_tools/screen/view_screen.dart';
 import 'package:pdf_tools/services/settings_provider.dart';
 import 'package:pdf_tools/services/settings_service.dart';
 import 'package:pdf_tools/services/theme_notifier.dart';

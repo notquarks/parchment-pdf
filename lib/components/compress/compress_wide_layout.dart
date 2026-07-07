@@ -69,19 +69,21 @@ class CompressWideLayout extends StatelessWidget {
                   files: files,
                   isWide: true,
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CompressControls(
-                      quality: quality,
-                      onQualityChanged: onQualityChanged,
-                    ),
-                    const Spacer(),
-                    CompressInlineActions(
-                      onAddFile: onAddFile,
-                      onCompress: onCompress,
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CompressControls(
+                        quality: quality,
+                        onQualityChanged: onQualityChanged,
+                      ),
+                      const Spacer(),
+                      CompressInlineActions(
+                        onAddFile: onAddFile,
+                        onCompress: onCompress,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

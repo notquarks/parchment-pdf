@@ -90,7 +90,7 @@ class _CompressScreenState extends State<CompressScreen> {
     for (final picked in _pickedFiles) {
       final source = FileSource(picked.file);
       final savedName =
-          '${p.basenameWithoutExtension(picked.file.path)}_compressed_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
+          '${p.basenameWithoutExtension(picked.file.path)}_min_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
       final saveFile = File('${saveDir.path}/$savedName');
       final output = await FileSink.create(saveFile);
 
@@ -171,7 +171,7 @@ class _CompressScreenState extends State<CompressScreen> {
                 );
               },
             )
-          : CompressEmptyState(onPick: _pickFile),
+          : Center(child: CompressEmptyState(onPick: _pickFile)),
       bottomNavigationBar: _pickedFiles.isNotEmpty && !_isWide(context)
           ? ActionBottomBar(
               label: 'File Size',
