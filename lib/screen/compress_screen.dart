@@ -6,7 +6,10 @@ import 'package:m3e_core/m3e_core.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf_manipulator/io.dart';
 import 'package:pdf_manipulator/pdf_manipulator.dart';
-import 'package:pdf_tools/components/loading_spinner.dart';
+import 'package:pdf_tools/components/action_bottom_bar.dart';
+import 'package:pdf_tools/components/compress/compress_empty_state.dart';
+import 'package:pdf_tools/components/compress/compress_narrow_layout.dart';
+import 'package:pdf_tools/components/compress/compress_wide_layout.dart';
 import 'package:pdf_tools/model/task_messages.dart';
 import 'package:pdf_tools/screen/result_screen.dart';
 import 'package:pdf_tools/services/settings_provider.dart';
@@ -139,13 +142,8 @@ class _CompressScreenState extends State<CompressScreen> {
     );
   }
 
-  PickedPdfInfo? _currentFile(String? sourceName) {
-    if (_pickedFiles.isEmpty) return null;
-    return _pickedFiles.firstWhere(
-      (f) => f.file.path == sourceName,
-      orElse: () => _pickedFiles.first,
-    );
-  }
+  bool _isWide(BuildContext context) =>
+      MediaQuery.of(context).size.width >= 600;
 
   @override
   Widget build(BuildContext context) {
@@ -155,309 +153,43 @@ class _CompressScreenState extends State<CompressScreen> {
           ? LayoutBuilder(
               builder: (context, constraints) {
                 final isWide = constraints.maxWidth >= 600;
-                if (isWide) return _wideLayout(constraints);
-                return _narrowLayout();
+                if (isWide) {
+                  return CompressWideLayout(
+                    documentRef: _documentRef!,
+                    files: _pickedFiles,
+                    quality: _quality,
+                    onQualityChanged: (v) => setState(() => _quality = v),
+                    onAddFile: _pickFile,
+                    onCompress: () => _startCompress(_quality),
+                  );
+                }
+                return CompressNarrowLayout(
+                  documentRef: _documentRef!,
+                  files: _pickedFiles,
+                  quality: _quality,
+                  onQualityChanged: (v) => setState(() => _quality = v),
+                );
               },
             )
-          : Center(child: _noDocs(context)),
-      bottomNavigationBar: _pickedFiles.isNotEmpty && _isWide(context)
-          ? null
-          : _bottomBar(),
-    );
-  }
-
-  Widget _narrowLayout() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(12.0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        spacing: 24,
-        children: [_previewCard(), _fileInfo(), _controls()],
-      ),
-    );
-  }
-
-  bool _isWide(BuildContext context) =>
-      MediaQuery.of(context).size.width >= 600;
-
-  Widget _wideLayout(BoxConstraints constraints) {
-    return Padding(
-      padding: const EdgeInsets.all(12.0),
-      child: Row(
-        mainAxisSize: .max,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: 24,
-        children: [
-          Expanded(
-            child: Card(
-              clipBehavior: Clip.antiAlias,
-              child: PdfDocumentViewBuilder(
-                documentRef: _documentRef!,
-                builder: (context, document) {
-                  if (document == null) {
-                    return Center(
-                      child: Icon(
-                        Icons.description_outlined,
-                        size: 32,
-                        color: Theme.of(context).colorScheme.outline,
-                      ),
-                    );
-                  }
-                  return AspectRatio(
-                    aspectRatio: 0.65,
-                    child: PdfPageView(
-                      document: document,
-                      pageNumber: 1,
-                      alignment: Alignment.center,
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-          Expanded(
-            child: Column(
-              spacing: 16,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _fileInfo(isWide: true),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [_controls(), const Spacer(), _inlineActions()],
+          : CompressEmptyState(onPick: _pickFile),
+      bottomNavigationBar: _pickedFiles.isNotEmpty && !_isWide(context)
+          ? ActionBottomBar(
+              label: 'File Size',
+              value: formatBytes(_pickedFiles.last.sizeBytes, 2),
+              actions: [
+                M3EFilledButton.tonal(
+                  shape: .square,
+                  onPressed: _pickFile,
+                  child: const Icon(Icons.add),
+                ),
+                M3EButton.icon(
+                  onPressed: () => _startCompress(_quality),
+                  icon: const Icon(Icons.compress),
+                  label: const Text('Compress'),
                 ),
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _previewCard() {
-    final shortest = MediaQuery.of(context).size.shortestSide;
-    return PdfDocumentViewBuilder(
-      documentRef: _documentRef!,
-      builder: (context, document) {
-        if (document == null) {
-          return Card(
-            child: SizedBox(
-              width: shortest * 0.6,
-              child: AspectRatio(
-                aspectRatio: 0.65,
-                child: Center(
-                  child: LoadingSpinner(size: 0.4),
-                ),
-              ),
-            ),
-          );
-        }
-        return Card(
-          clipBehavior: Clip.antiAlias,
-          child: SizedBox(
-            width: MediaQuery.of(context).size.shortestSide * 0.6,
-            child: AspectRatio(
-              aspectRatio: 0.65,
-              child: PdfPageView(
-                document: document,
-                pageNumber: 1,
-                alignment: Alignment.center,
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _fileInfo({bool isWide = false}) {
-    return PdfDocumentViewBuilder(
-      documentRef: _documentRef!,
-      builder: (context, document) {
-        if (document == null) return const SizedBox.shrink();
-        final file = _currentFile(document.sourceName);
-        final name = Text(
-          p.basename(document.sourceName),
-          style: Theme.of(context).textTheme.titleMedium,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: isWide ? TextAlign.start : TextAlign.center,
-        );
-        final chip = (file != null)
-            ? Chip(
-                shape: const StadiumBorder(),
-                label: Text(
-                  '${formatBytes(file.sizeBytes, 2)} • ${document.pages.length} pages',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              )
-            : null;
-        if (isWide && chip != null) {
-          return Row(
-            spacing: 12,
-            children: [
-              Expanded(child: name),
-              chip,
-            ],
-          );
-        }
-        return Column(children: [name, ?chip]);
-      },
-    );
-  }
-
-  Widget _controls() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 12,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Slider(
-                value: _quality.toDouble(),
-                min: 10,
-                max: 100,
-                divisions: 18,
-                onChanged: (v) => setState(() => _quality = v.round()),
-              ),
-            ),
-            FilterChip(
-              onSelected: null,
-              showCheckmark: false,
-              selected: true,
-              shape: const StadiumBorder(),
-              label: Text('$_quality'),
-            ),
-          ],
-        ),
-        Text('Preset', style: Theme.of(context).textTheme.titleMedium),
-        Row(
-          spacing: 8,
-          children: [
-            _qualityButton(90, 'Minimal'),
-            _qualityButton(75, 'Medium'),
-            _qualityButton(50, 'Full'),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _qualityButton(int quality, String label) {
-    final selected = _quality == quality;
-    return Expanded(
-      child: selected
-          ? M3EFilledButton(
-              onPressed: () => setState(() => _quality = quality),
-              child: Text(label),
             )
-          : M3EFilledButton.tonal(
-              onPressed: () => setState(() => _quality = quality),
-              child: Text(label),
-            ),
-    );
-  }
-
-  Widget _inlineActions() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Row(
-        spacing: 8,
-        children: [
-          M3EFilledButton.tonal(
-            shape: .square,
-            onPressed: _pickFile,
-            child: const Icon(Icons.add),
-          ),
-          Expanded(
-            child: M3EButton.icon(
-              onPressed: () => _startCompress(_quality),
-              icon: const Icon(Icons.compress),
-              label: const Text('Compress'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget? _bottomBar() {
-    if (_pickedFiles.isEmpty) return null;
-    final file = _pickedFiles.last;
-    return BottomAppBar(
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('File Size', style: Theme.of(context).textTheme.titleSmall),
-              Text(
-                formatBytes(file.sizeBytes, 2),
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-              ),
-            ],
-          ),
-          Row(
-            spacing: 8,
-            children: [
-              M3EFilledButton.tonal(
-                shape: .square,
-                onPressed: _pickFile,
-                child: const Icon(Icons.add),
-              ),
-              M3EButton.icon(
-                onPressed: () => _startCompress(_quality),
-                icon: const Icon(Icons.compress),
-                label: const Text('Compress'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _noDocs(BuildContext context) {
-    final shortest = MediaQuery.of(context).size.shortestSide;
-    final containerSize = shortest * 0.5;
-    final pillSize = containerSize * 0.6;
-    final iconSize = pillSize * 0.4;
-    return Column(
-      mainAxisSize: MainAxisSize.max,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        SizedBox(
-          width: containerSize,
-          height: containerSize,
-          child: InkWell(
-            onTap: _pickFile,
-            borderRadius: BorderRadius.circular(16),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.max,
-              spacing: 12,
-              children: [
-                Text(
-                  'Select a Document',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                M3EContainer.pill(
-                  width: pillSize,
-                  height: pillSize,
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  child: Icon(Icons.insert_drive_file, size: iconSize),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+          : null,
     );
   }
 }
