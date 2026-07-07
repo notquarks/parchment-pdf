@@ -5,6 +5,7 @@ import 'package:loading_indicator_m3e/loading_indicator_m3e.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:pdf_manipulator/pdf_manipulator.dart';
+import 'package:pdf_tools/components/loading_spinner.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:pdf_tools/model/task_messages.dart';
 
@@ -132,9 +133,7 @@ class _ResultScreenState extends State<ResultScreen> {
                       ),
                       if (_error != null)
                         Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 18.0,
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 18.0),
                           child: Text(
                             _error!,
                             style: Theme.of(context).textTheme.bodyMedium
@@ -189,13 +188,7 @@ class _ResultScreenState extends State<ResultScreen> {
     }
     return KeyedSubtree(
       key: const ValueKey('loading'),
-      child: SizedBox(
-        width: shortest * 0.6,
-        height: shortest * 0.6,
-        child: LoadingIndicatorM3E(
-          variant: LoadingIndicatorM3EVariant.contained,
-        ),
-      ),
+      child: LoadingSpinner(context: context, size: 0.5),
     );
   }
 

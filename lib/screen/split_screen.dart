@@ -8,6 +8,7 @@ import 'package:m3e_core/m3e_core.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf_manipulator/io.dart';
 import 'package:pdf_manipulator/pdf_manipulator.dart';
+import 'package:pdf_tools/components/loading_spinner.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:pdf_tools/components/page_small_preview.dart';
 
@@ -370,9 +371,7 @@ class _SplitScreenState extends State<SplitScreen> {
             )
           else if (_filePicked != null)
             SliverFillRemaining(
-              child: Center(
-                child: _loadingSpinner(context, shortest: shortest),
-              ),
+              child: Center(child: LoadingSpinner(context: context, size: 0.4)),
             )
           else
             SliverFillRemaining(child: _noDocs(context)),
@@ -418,14 +417,6 @@ class _SplitScreenState extends State<SplitScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _loadingSpinner(BuildContext context, {required double shortest}) {
-    return SizedBox(
-      width: shortest * 0.4,
-      height: shortest * 0.4,
-      child: LoadingIndicatorM3E(variant: LoadingIndicatorM3EVariant.contained),
     );
   }
 }

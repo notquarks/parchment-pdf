@@ -7,6 +7,7 @@ import 'package:m3e_core/m3e_core.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf_manipulator/io.dart';
 import 'package:pdf_manipulator/pdf_manipulator.dart';
+import 'package:pdf_tools/components/loading_spinner.dart';
 import 'package:pdf_tools/model/task_messages.dart';
 import 'package:pdf_tools/screen/result_screen.dart';
 import 'package:pdf_tools/services/settings_provider.dart';
@@ -26,35 +27,36 @@ class CompressScreen extends StatefulWidget {
 class _CompressScreenState extends State<CompressScreen> {
   final List<PickedPdfInfo> _pickedFiles = [];
   PdfDocumentRef? _documentRef;
-  VoidCallback? _removeDocListener;
-  int _qualitySize = 75;
+  VoidCallback? _removeListener;
+  int _quality = 75;
+
   late final _controller = PdfPickController(
     isMounted: () => mounted,
-    onEvent: _applyEvent,
+    onEvent: _handleEvent,
     onError: (msg) => showErrorSnackBar(context, msg),
   );
 
-  void _applyEvent(PdfFileEvent event) {
+  void _handleEvent(PdfFileEvent event) {
     switch (event) {
       case PdfFileAdded(:final info):
         setState(() => _pickedFiles.add(info));
-        _preloadDocument(info.file.path);
+        _loadDocument(info.file.path);
       case PdfFileResolved(:final info):
-        setState(() => _updateResolved(info));
+        setState(() => _updateFile(info));
       case PdfFileFailed(:final error):
         showErrorSnackBar(context, '${error.fileName}: ${error.error}');
     }
   }
 
-  void _preloadDocument(String path) {
-    _removeDocListener?.call();
+  void _loadDocument(String path) {
+    _removeListener?.call();
     _documentRef = PdfDocumentRefFile(path);
     final listenable = _documentRef!.resolveListenable();
-    _removeDocListener = listenable.addListener(() {});
+    _removeListener = listenable.addListener(() {});
     listenable.load();
   }
 
-  void _updateResolved(PickedPdfInfo info) {
+  void _updateFile(PickedPdfInfo info) {
     final index = _pickedFiles.indexWhere((f) => f.file.path == info.file.path);
     if (index != -1) _pickedFiles[index] = info;
   }
@@ -66,11 +68,11 @@ class _CompressScreenState extends State<CompressScreen> {
 
   @override
   void dispose() {
-    _removeDocListener?.call();
+    _removeListener?.call();
     super.dispose();
   }
 
-  Future<String> _doCompress(
+  Future<String> _compressFiles(
     Pdf pdf, {
     required int imageQuality,
     void Function(PdfTask<void>)? onTaskCreated,
@@ -112,7 +114,7 @@ class _CompressScreenState extends State<CompressScreen> {
     final pdf = Pdf();
     PdfTask<void>? compressTask;
 
-    final compressFuture = _doCompress(
+    final compressFuture = _compressFiles(
       pdf,
       imageQuality: quality,
       onTaskCreated: (t) => compressTask = t,
@@ -154,8 +156,8 @@ class _CompressScreenState extends State<CompressScreen> {
           ? LayoutBuilder(
               builder: (context, constraints) {
                 final isWide = constraints.maxWidth >= 600;
-                if (isWide) return _buildWideLayout(constraints);
-                return _buildNarrowLayout();
+                if (isWide) return _wideLayout(constraints);
+                return _narrowLayout();
               },
             )
           : Center(child: _noDocs(context)),
@@ -165,14 +167,14 @@ class _CompressScreenState extends State<CompressScreen> {
     );
   }
 
-  Widget _buildNarrowLayout() {
+  Widget _narrowLayout() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(12.0),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         spacing: 24,
-        children: [_buildPreviewCard(), _buildFileInfo(), _buildControls()],
+        children: [_previewCard(), _fileInfo(), _controls()],
       ),
     );
   }
@@ -180,7 +182,7 @@ class _CompressScreenState extends State<CompressScreen> {
   bool _isWide(BuildContext context) =>
       MediaQuery.of(context).size.width >= 600;
 
-  Widget _buildWideLayout(BoxConstraints constraints) {
+  Widget _wideLayout(BoxConstraints constraints) {
     return Padding(
       padding: const EdgeInsets.all(12.0),
       child: Row(
@@ -220,14 +222,10 @@ class _CompressScreenState extends State<CompressScreen> {
               spacing: 16,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildFileInfo(isWide: true),
+                _fileInfo(isWide: true),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildControls(),
-                    const Spacer(),
-                    _buildInlineActions(),
-                  ],
+                  children: [_controls(), const Spacer(), _inlineActions()],
                 ),
               ],
             ),
@@ -237,7 +235,7 @@ class _CompressScreenState extends State<CompressScreen> {
     );
   }
 
-  Widget _buildPreviewCard() {
+  Widget _previewCard() {
     final shortest = MediaQuery.of(context).size.shortestSide;
     return PdfDocumentViewBuilder(
       documentRef: _documentRef!,
@@ -249,7 +247,7 @@ class _CompressScreenState extends State<CompressScreen> {
               child: AspectRatio(
                 aspectRatio: 0.65,
                 child: Center(
-                  child: _loadingSpinner(context, shortest: shortest),
+                  child: LoadingSpinner(context: context, size: 0.4),
                 ),
               ),
             ),
@@ -273,7 +271,7 @@ class _CompressScreenState extends State<CompressScreen> {
     );
   }
 
-  Widget _buildFileInfo({bool isWide = false}) {
+  Widget _fileInfo({bool isWide = false}) {
     return PdfDocumentViewBuilder(
       documentRef: _documentRef!,
       builder: (context, document) {
@@ -309,7 +307,7 @@ class _CompressScreenState extends State<CompressScreen> {
     );
   }
 
-  Widget _buildControls() {
+  Widget _controls() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 12,
@@ -318,11 +316,11 @@ class _CompressScreenState extends State<CompressScreen> {
           children: [
             Expanded(
               child: Slider(
-                value: _qualitySize.toDouble(),
+                value: _quality.toDouble(),
                 min: 10,
                 max: 100,
                 divisions: 18,
-                onChanged: (v) => setState(() => _qualitySize = v.round()),
+                onChanged: (v) => setState(() => _quality = v.round()),
               ),
             ),
             FilterChip(
@@ -330,7 +328,7 @@ class _CompressScreenState extends State<CompressScreen> {
               showCheckmark: false,
               selected: true,
               shape: const StadiumBorder(),
-              label: Text('$_qualitySize'),
+              label: Text('$_quality'),
             ),
           ],
         ),
@@ -348,21 +346,21 @@ class _CompressScreenState extends State<CompressScreen> {
   }
 
   Widget _qualityButton(int quality, String label) {
-    final selected = _qualitySize == quality;
+    final selected = _quality == quality;
     return Expanded(
       child: selected
           ? M3EFilledButton(
-              onPressed: () => setState(() => _qualitySize = quality),
+              onPressed: () => setState(() => _quality = quality),
               child: Text(label),
             )
           : M3EFilledButton.tonal(
-              onPressed: () => setState(() => _qualitySize = quality),
+              onPressed: () => setState(() => _quality = quality),
               child: Text(label),
             ),
     );
   }
 
-  Widget _buildInlineActions() {
+  Widget _inlineActions() {
     return Padding(
       padding: const EdgeInsets.only(top: 16),
       child: Row(
@@ -375,7 +373,7 @@ class _CompressScreenState extends State<CompressScreen> {
           ),
           Expanded(
             child: M3EButton.icon(
-              onPressed: () => _startCompress(_qualitySize),
+              onPressed: () => _startCompress(_quality),
               icon: const Icon(Icons.compress),
               label: const Text('Compress'),
             ),
@@ -414,7 +412,7 @@ class _CompressScreenState extends State<CompressScreen> {
                 child: const Icon(Icons.add),
               ),
               M3EButton.icon(
-                onPressed: () => _startCompress(_qualitySize),
+                onPressed: () => _startCompress(_quality),
                 icon: const Icon(Icons.compress),
                 label: const Text('Compress'),
               ),
@@ -461,14 +459,6 @@ class _CompressScreenState extends State<CompressScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _loadingSpinner(BuildContext context, {required double shortest}) {
-    return SizedBox(
-      width: shortest * 0.4,
-      height: shortest * 0.4,
-      child: LoadingIndicatorM3E(variant: LoadingIndicatorM3EVariant.contained),
     );
   }
 }
