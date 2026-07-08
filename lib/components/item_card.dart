@@ -7,14 +7,16 @@ class ItemCard extends StatelessWidget {
     this.subtitle,
     required this.icon,
     required this.onTap,
+    this.isCompact,
   });
 
-  static const double _gridBreakpoint = 220;
+  static const double gridBreakpoint = 220;
 
   final String title;
   final String? subtitle;
   final Icon icon;
   final VoidCallback onTap;
+  final bool? isCompact;
 
   @override
   Widget build(BuildContext context) {
@@ -25,20 +27,26 @@ class ItemCard extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(12.0),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final isCompact = constraints.maxWidth < _gridBreakpoint;
-              return isCompact
-                  ? Padding(
-                      padding: const EdgeInsets.all(14.0),
-                      child: _buildVertical(context),
-                    )
-                  : _buildHorizontal(context);
-            },
-          ),
+          child: isCompact == null
+              ? LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compact = constraints.maxWidth < gridBreakpoint;
+                    return _buildContent(context, compact);
+                  },
+                )
+              : _buildContent(context, isCompact!),
         ),
       ),
     );
+  }
+
+  Widget _buildContent(BuildContext context, bool compact) {
+    return compact
+        ? Padding(
+            padding: const EdgeInsets.all(14.0),
+            child: _buildVertical(context),
+          )
+        : _buildHorizontal(context);
   }
 
   Widget _buildIconCircle(BuildContext context) {
