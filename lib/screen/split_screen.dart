@@ -191,19 +191,21 @@ class _SplitScreenState extends State<SplitScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Center(
-                child: Container(
-                  width: 32,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(2),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Center(
+                  child: Container(
+                    width: 32,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
               ListTile(
                 leading: Icon(_allSelected ? Icons.deselect : Icons.select_all),
                 title: Text(_allSelected ? 'Deselect All' : 'Select All'),
@@ -340,6 +342,7 @@ class _SplitScreenState extends State<SplitScreen> {
                     onTap: () => _togglePage(pageNumber),
                     borderRadius: BorderRadius.circular(8),
                     child: Column(
+                      spacing: 4,
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Expanded(
@@ -349,18 +352,21 @@ class _SplitScreenState extends State<SplitScreen> {
                             isSelected: isSelected,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Page $pageNumber',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: isSelected
-                                    ? Theme.of(context).colorScheme.primary
-                                    : null,
-                                fontWeight: isSelected ? FontWeight.w600 : null,
-                              ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 2.0),
+                          child: Text(
+                            'Page $pageNumber',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: isSelected
+                                      ? Theme.of(context).colorScheme.primary
+                                      : null,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : null,
+                                ),
+                          ),
                         ),
-                        const SizedBox(height: 2),
                       ],
                     ),
                   );
@@ -368,9 +374,7 @@ class _SplitScreenState extends State<SplitScreen> {
               ),
             )
           else if (_filePicked != null)
-            SliverFillRemaining(
-              child: Center(child: LoadingSpinner(size: 0.4)),
-            )
+            SliverFillRemaining(child: Center(child: LoadingSpinner(size: 0.4)))
           else
             SliverFillRemaining(child: _noDocs(context)),
         ],

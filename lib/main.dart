@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:pdf_tools/screen/compress_screen.dart';
+import 'package:pdf_tools/screen/edit_screen.dart';
 import 'package:pdf_tools/screen/main_screen.dart';
 import 'package:pdf_tools/screen/merge_screen.dart';
 import 'package:pdf_tools/screen/onboarding_screen.dart';
 import 'package:pdf_tools/screen/settings_screen.dart';
 import 'package:pdf_tools/screen/split_screen.dart';
-import 'package:pdf_tools/screen/view_screen.dart';
 import 'package:pdf_tools/services/settings_provider.dart';
 import 'package:pdf_tools/services/settings_service.dart';
 import 'package:pdf_tools/services/theme_notifier.dart';
@@ -101,6 +101,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           '/merge': (_) => const MergeScreen(),
           '/split': (_) => const SplitScreen(),
           '/compress': (_) => const CompressScreen(),
+          '/edit': (_) => const EditScreen(),
           '/settings': (_) => const SettingsScreen(),
         },
       ),

@@ -15,6 +15,7 @@ class HomeScreen extends StatelessWidget {
         SliverAppBar(
           expandedHeight: 150.0,
           pinned: true,
+          floating: false,
           flexibleSpace: FlexibleSpaceM3(title: title),
           actions: [
             M3ETextButton(

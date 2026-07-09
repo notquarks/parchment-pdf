@@ -4,8 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:path/path.dart' as p;
-import 'package:pdf_manipulator/io.dart';
-import 'package:pdf_manipulator/pdf_manipulator.dart';
+import 'package:pdf_tools/compression/compression.dart';
 import 'package:pdf_tools/components/action_bottom_bar.dart';
 import 'package:pdf_tools/components/compress/compress_empty_state.dart';
 import 'package:pdf_tools/components/compress/compress_narrow_layout.dart';
@@ -31,6 +30,8 @@ class _CompressScreenState extends State<CompressScreen> {
   PdfDocumentRef? _documentRef;
   VoidCallback? _removeListener;
   int _quality = 75;
+  bool _unembedFonts = false;
+  int _selectedIndex = 0;
 
   late final _controller = PdfPickController(
     isMounted: () => mounted,
@@ -41,7 +42,10 @@ class _CompressScreenState extends State<CompressScreen> {
   void _handleEvent(PdfFileEvent event) {
     switch (event) {
       case PdfFileAdded(:final info):
-        setState(() => _pickedFiles.add(info));
+        setState(() {
+          _pickedFiles.add(info);
+          _selectedIndex = _pickedFiles.length - 1;
+        });
         _loadDocument(info.file.path);
       case PdfFileResolved(:final info):
         setState(() => _updateFile(info));
@@ -56,6 +60,12 @@ class _CompressScreenState extends State<CompressScreen> {
     final listenable = _documentRef!.resolveListenable();
     _removeListener = listenable.addListener(() {});
     listenable.load();
+  }
+
+  void _selectFile(int index) {
+    if (index < 0 || index >= _pickedFiles.length) return;
+    setState(() => _selectedIndex = index);
+    _loadDocument(_pickedFiles[index].file.path);
   }
 
   void _updateFile(PickedPdfInfo info) {
@@ -74,10 +84,10 @@ class _CompressScreenState extends State<CompressScreen> {
     super.dispose();
   }
 
-  Future<String> _compressFiles(
-    Pdf pdf, {
+  Future<List<String>> _compressFiles({
     required int imageQuality,
-    void Function(PdfTask<void>)? onTaskCreated,
+    required bool unembedFonts,
+    required CancellationToken cancelToken,
   }) async {
     final settingsService = SettingsProvider.of(context).settingsService;
     final downloadPath = await settingsService.getSavePath();
@@ -86,41 +96,44 @@ class _CompressScreenState extends State<CompressScreen> {
       await saveDir.create(recursive: true);
     }
 
-    String lastPath = '';
-    for (final picked in _pickedFiles) {
-      final source = FileSource(picked.file);
-      final savedName =
-          '${p.basenameWithoutExtension(picked.file.path)}_min_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
-      final saveFile = File('${saveDir.path}/$savedName');
-      final output = await FileSink.create(saveFile);
+    final options = CompressionOptions.withQuality(imageQuality);
+    final savedPaths = <String>[];
 
-      final task = pdf.compress(source, output, imageQuality: imageQuality);
-      onTaskCreated?.call(task);
+    var index = 0;
+    for (final picked in _pickedFiles) {
+      if (cancelToken.isCancelled) break;
+
+      final savedName =
+          '${p.basenameWithoutExtension(picked.file.path)}_min_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}_$index.pdf';
+      final saveFile = File('${saveDir.path}/$savedName');
+
+      final service = CompressionService();
+      await service.initialize();
       try {
-        await task;
-      } on PdfCancelled {
-        await output.close();
-        if (await saveFile.exists()) {
-          await saveFile.delete();
-        }
-        rethrow;
+        await service.compressPdf(
+          filePath: picked.file.path,
+          options: options,
+          outputPath: saveFile.path,
+          cancelToken: cancelToken,
+        );
       } finally {
-        await output.close();
+        await service.dispose();
       }
-      lastPath = saveFile.path;
+
+      index++;
+      savedPaths.add(saveFile.path);
     }
-    return lastPath;
+    return savedPaths;
   }
 
   void _startCompress(int quality) {
-    final pdf = Pdf();
-    PdfTask<void>? compressTask;
+    final cancelToken = CancellationToken();
 
     final compressFuture = _compressFiles(
-      pdf,
       imageQuality: quality,
-      onTaskCreated: (t) => compressTask = t,
-    ).whenComplete(() => pdf.dispose());
+      unembedFonts: _unembedFonts,
+      cancelToken: cancelToken,
+    );
 
     Navigator.pushReplacement(
       context,
@@ -128,14 +141,9 @@ class _CompressScreenState extends State<CompressScreen> {
         builder: (context) => ResultScreen(
           messages: TaskMessages.compress,
           fileCount: _pickedFiles.length,
-          mergeFuture: compressFuture,
+          mergeMultiFuture: compressFuture,
           onCancel: () async {
-            final task = compressTask;
-            if (task != null) {
-              task.cancel();
-            } else {
-              await pdf.dispose();
-            }
+            cancelToken.cancel();
           },
         ),
       ),
@@ -148,7 +156,10 @@ class _CompressScreenState extends State<CompressScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Compress')),
+      appBar: AppBar(
+        title: const Text('Compress'),
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+      ),
       body: _pickedFiles.isNotEmpty && _documentRef != null
           ? LayoutBuilder(
               builder: (context, constraints) {
@@ -157,17 +168,27 @@ class _CompressScreenState extends State<CompressScreen> {
                   return CompressWideLayout(
                     documentRef: _documentRef!,
                     files: _pickedFiles,
+                    selectedIndex: _selectedIndex,
                     quality: _quality,
+                    unembedFonts: _unembedFonts,
                     onQualityChanged: (v) => setState(() => _quality = v),
+                    onUnembedFontsChanged: (v) =>
+                        setState(() => _unembedFonts = v),
                     onAddFile: _pickFile,
                     onCompress: () => _startCompress(_quality),
+                    onFileSelected: _selectFile,
                   );
                 }
                 return CompressNarrowLayout(
                   documentRef: _documentRef!,
                   files: _pickedFiles,
+                  selectedIndex: _selectedIndex,
                   quality: _quality,
+                  unembedFonts: _unembedFonts,
                   onQualityChanged: (v) => setState(() => _quality = v),
+                  onUnembedFontsChanged: (v) =>
+                      setState(() => _unembedFonts = v),
+                  onFileSelected: _selectFile,
                 );
               },
             )

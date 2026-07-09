@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:pdf_manipulator/pdf_manipulator.dart';
+import 'package:pdf_tools/compression/compression.dart';
 import 'package:pdf_tools/components/loading_spinner.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:pdf_tools/model/task_messages.dart';
@@ -15,7 +16,9 @@ class ResultScreen extends StatefulWidget {
     required this.fileCount,
     this.filePath,
     this.fileName,
+    this.filePaths,
     this.mergeFuture,
+    this.mergeMultiFuture,
     this.onCancel,
   });
 
@@ -23,7 +26,9 @@ class ResultScreen extends StatefulWidget {
   final int fileCount;
   final String? filePath;
   final String? fileName;
+  final List<String>? filePaths;
   final Future<String>? mergeFuture;
+  final Future<List<String>>? mergeMultiFuture;
   final Future<void> Function()? onCancel;
 
   @override
@@ -33,19 +38,26 @@ class ResultScreen extends StatefulWidget {
 class _ResultScreenState extends State<ResultScreen> {
   String? _filePath;
   String? _fileName;
+  List<String> _filePaths = [];
   bool _completed = false;
   String? _error;
   bool _cancelled = false;
+
+  bool get _hasMultipleFiles => _filePaths.length > 1;
 
   @override
   void initState() {
     super.initState();
     _filePath = widget.filePath;
     _fileName = widget.fileName;
-    _completed = widget.mergeFuture == null;
+    _filePaths = widget.filePaths ?? [];
+    _completed = widget.mergeFuture == null && widget.mergeMultiFuture == null;
 
     if (widget.mergeFuture != null) {
       _listenToFuture(widget.mergeFuture!);
+    }
+    if (widget.mergeMultiFuture != null) {
+      _listenToMultiFuture(widget.mergeMultiFuture!);
     }
   }
 
@@ -53,18 +65,33 @@ class _ResultScreenState extends State<ResultScreen> {
     future.then(_onSuccess).catchError(_onError);
   }
 
+  void _listenToMultiFuture(Future<List<String>> future) {
+    future.then(_onMultiSuccess).catchError(_onError);
+  }
+
   void _onSuccess(String path) {
     if (!mounted) return;
     setState(() {
       _filePath = path;
       _fileName = path.split(Platform.pathSeparator).last;
+      _filePaths = [path];
+      _completed = true;
+    });
+  }
+
+  void _onMultiSuccess(List<String> paths) {
+    if (!mounted) return;
+    setState(() {
+      _filePaths = paths;
+      _filePath = paths.first;
+      _fileName = paths.first.split(Platform.pathSeparator).last;
       _completed = true;
     });
   }
 
   void _onError(Object e) {
     if (!mounted) return;
-    if (e is PdfCancelled) {
+    if (e is PdfCancelled || e is CancellationException) {
       setState(() => _cancelled = true);
     } else {
       setState(() => _error = e.toString());
@@ -108,7 +135,32 @@ class _ResultScreenState extends State<ResultScreen> {
                           ),
                         ),
                       ),
-                      if (_fileName != null)
+                      if (_hasMultipleFiles)
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxHeight: 120),
+                          child: SingleChildScrollView(
+                            child: Column(
+                              children: _filePaths.map((path) {
+                                final name = path.split(Platform.pathSeparator).last;
+                                return Padding(
+                                  padding: EdgeInsets.only(bottom: 4),
+                                  child: Text(
+                                    name,
+                                    style: TextStyle(
+                                      color: Theme.of(context).colorScheme.outline,
+                                      fontSize: 12,
+                                    ),
+                                    softWrap: true,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        )
+                      else if (_fileName != null)
                         Text(
                           _fileName!,
                           style: TextStyle(
@@ -245,16 +297,23 @@ class _ResultScreenState extends State<ResultScreen> {
           if (_filePath != null) ...[
             M3EFilledButton.icon(
               size: M3EButtonSize.md,
-              onPressed: () => SharePlus.instance.share(
-                ShareParams(files: [XFile(_filePath!)]),
-              ),
+              onPressed: () {
+                final files = _hasMultipleFiles
+                    ? _filePaths.map((p) => XFile(p)).toList()
+                    : [XFile(_filePath!)];
+                SharePlus.instance.share(
+                  ShareParams(files: files),
+                );
+              },
               icon: Icon(Icons.share),
               label: Text('Share'),
             ),
             Expanded(
               child: M3EFilledButton(
                 size: M3EButtonSize.md,
-                onPressed: () => OpenFilex.open(_filePath!),
+                onPressed: () {
+                  OpenFilex.open(_filePath!);
+                },
                 child: Text('Open'),
               ),
             ),

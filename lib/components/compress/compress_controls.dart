@@ -6,10 +6,14 @@ class CompressControls extends StatelessWidget {
     super.key,
     required this.quality,
     required this.onQualityChanged,
+    required this.unembedFonts,
+    required this.onUnembedFontsChanged,
   });
 
   final int quality;
   final ValueChanged<int> onQualityChanged;
+  final bool unembedFonts;
+  final ValueChanged<bool> onUnembedFontsChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -37,28 +41,68 @@ class CompressControls extends StatelessWidget {
             ),
           ],
         ),
-        Text('Preset', style: Theme.of(context).textTheme.titleMedium),
-        Row(
-          mainAxisSize: .max,
-          spacing: 8,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12.0),
+          child: Column(
+            spacing: 12,
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Preset',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.surfaceTint,
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.max,
+                spacing: 8,
+                children: [
+                  QualityPresetButton(
+                    quality: 90,
+                    label: 'Minimal',
+                    isSelected: quality == 90,
+                    onPressed: () => onQualityChanged(90),
+                  ),
+                  QualityPresetButton(
+                    quality: 75,
+                    label: 'Medium',
+                    isSelected: quality == 75,
+                    onPressed: () => onQualityChanged(75),
+                  ),
+                  QualityPresetButton(
+                    quality: 50,
+                    label: 'Full',
+                    isSelected: quality == 50,
+                    onPressed: () => onQualityChanged(50),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 18),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            QualityPresetButton(
-              quality: 90,
-              label: 'Minimal',
-              isSelected: quality == 90,
-              onPressed: () => onQualityChanged(90),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              child: Text(
+                'Advanced',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.surfaceTint,
+                ),
+              ),
             ),
-            QualityPresetButton(
-              quality: 75,
-              label: 'Medium',
-              isSelected: quality == 75,
-              onPressed: () => onQualityChanged(75),
-            ),
-            QualityPresetButton(
-              quality: 50,
-              label: 'Full',
-              isSelected: quality == 50,
-              onPressed: () => onQualityChanged(50),
+            SwitchListTile.adaptive(
+              title: const Text('Unembed Fonts'),
+              subtitle: Text(
+                'Replaces embedded fonts with standard PDF fonts.'
+                'it may change the appearance of text.',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+              value: unembedFonts,
+              onChanged: onUnembedFontsChanged,
             ),
           ],
         ),
