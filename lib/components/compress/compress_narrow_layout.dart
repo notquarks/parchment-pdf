@@ -12,9 +12,7 @@ class CompressNarrowLayout extends StatelessWidget {
     required this.files,
     required this.selectedIndex,
     required this.quality,
-    required this.unembedFonts,
     required this.onQualityChanged,
-    required this.onUnembedFontsChanged,
     required this.onFileSelected,
   });
 
@@ -22,9 +20,7 @@ class CompressNarrowLayout extends StatelessWidget {
   final List<PickedPdfInfo> files;
   final int selectedIndex;
   final int quality;
-  final bool unembedFonts;
   final ValueChanged<int> onQualityChanged;
-  final ValueChanged<bool> onUnembedFontsChanged;
   final ValueChanged<int> onFileSelected;
 
   @override
@@ -56,8 +52,6 @@ class CompressNarrowLayout extends StatelessWidget {
           CompressControls(
             quality: quality,
             onQualityChanged: onQualityChanged,
-            unembedFonts: unembedFonts,
-            onUnembedFontsChanged: onUnembedFontsChanged,
           ),
         ],
       ),

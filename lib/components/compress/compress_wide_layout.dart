@@ -13,9 +13,7 @@ class CompressWideLayout extends StatelessWidget {
     required this.files,
     required this.selectedIndex,
     required this.quality,
-    required this.unembedFonts,
     required this.onQualityChanged,
-    required this.onUnembedFontsChanged,
     required this.onAddFile,
     required this.onCompress,
     required this.onFileSelected,
@@ -25,9 +23,7 @@ class CompressWideLayout extends StatelessWidget {
   final List<PickedPdfInfo> files;
   final int selectedIndex;
   final int quality;
-  final bool unembedFonts;
   final ValueChanged<int> onQualityChanged;
-  final ValueChanged<bool> onUnembedFontsChanged;
   final VoidCallback onAddFile;
   final VoidCallback onCompress;
   final ValueChanged<int> onFileSelected;
@@ -73,8 +69,6 @@ class CompressWideLayout extends StatelessWidget {
                       CompressControls(
                         quality: quality,
                         onQualityChanged: onQualityChanged,
-                        unembedFonts: unembedFonts,
-                        onUnembedFontsChanged: onUnembedFontsChanged,
                       ),
                       const Spacer(),
                       CompressInlineActions(

@@ -6,14 +6,10 @@ class CompressControls extends StatelessWidget {
     super.key,
     required this.quality,
     required this.onQualityChanged,
-    required this.unembedFonts,
-    required this.onUnembedFontsChanged,
   });
 
   final int quality;
   final ValueChanged<int> onQualityChanged;
-  final bool unembedFonts;
-  final ValueChanged<bool> onUnembedFontsChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -80,31 +76,6 @@ class CompressControls extends StatelessWidget {
               ),
             ],
           ),
-        ),
-        const Divider(height: 18),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0),
-              child: Text(
-                'Advanced',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.surfaceTint,
-                ),
-              ),
-            ),
-            SwitchListTile.adaptive(
-              title: const Text('Unembed Fonts'),
-              subtitle: Text(
-                'Replaces embedded fonts with standard PDF fonts.'
-                'it may change the appearance of text.',
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-              value: unembedFonts,
-              onChanged: onUnembedFontsChanged,
-            ),
-          ],
         ),
       ],
     );

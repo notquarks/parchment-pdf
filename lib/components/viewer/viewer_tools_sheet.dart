@@ -38,13 +38,11 @@ class ViewerToolsSheet extends StatefulWidget {
     required this.scaleType,
     required this.grayscale,
     required this.brightness,
-    required this.cropBorders,
     required this.onReadingDirectionChanged,
     required this.onBackgroundThemeChanged,
     required this.onScaleTypeChanged,
     required this.onGrayscaleToggled,
     required this.onBrightnessChanged,
-    required this.onCropBordersToggled,
   });
 
   final ReadingDirection readingDirection;
@@ -52,13 +50,11 @@ class ViewerToolsSheet extends StatefulWidget {
   final ScaleType scaleType;
   final bool grayscale;
   final double brightness;
-  final bool cropBorders;
   final ValueChanged<ReadingDirection> onReadingDirectionChanged;
   final ValueChanged<BackgroundTheme> onBackgroundThemeChanged;
   final ValueChanged<ScaleType> onScaleTypeChanged;
   final VoidCallback onGrayscaleToggled;
   final ValueChanged<double> onBrightnessChanged;
-  final VoidCallback onCropBordersToggled;
 
   @override
   State<ViewerToolsSheet> createState() => _ViewerToolsSheetState();
@@ -72,7 +68,6 @@ class _ViewerToolsSheetState extends State<ViewerToolsSheet>
   late ScaleType _scaleType;
   late bool _grayscale;
   late double _brightness;
-  late bool _cropBorders;
 
   @override
   void initState() {
@@ -83,7 +78,6 @@ class _ViewerToolsSheetState extends State<ViewerToolsSheet>
     _scaleType = widget.scaleType;
     _grayscale = widget.grayscale;
     _brightness = widget.brightness;
-    _cropBorders = widget.cropBorders;
   }
 
   @override
@@ -115,11 +109,6 @@ class _ViewerToolsSheetState extends State<ViewerToolsSheet>
   void _onBrightnessChanged(double b) {
     setState(() => _brightness = b);
     widget.onBrightnessChanged(b);
-  }
-
-  void _onCropBordersToggled() {
-    setState(() => _cropBorders = !_cropBorders);
-    widget.onCropBordersToggled();
   }
 
   @override
@@ -180,12 +169,6 @@ class _ViewerToolsSheetState extends State<ViewerToolsSheet>
                       selected: _backgroundTheme,
                       labelOf: (t) => t.label,
                       onChanged: _onBackgroundThemeChanged,
-                    ),
-                    const ViewerSectionHeader(title: 'Display'),
-                    ViewerToggleRow(
-                      label: 'Crop borders',
-                      value: _cropBorders,
-                      onChanged: (_) => _onCropBordersToggled(),
                     ),
                   ],
                 ),

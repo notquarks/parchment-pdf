@@ -15,13 +15,12 @@ import 'image_processor.dart';
 class CompressionService {
   final CompressionWorker _worker;
   bool _isDisposed = false;
+  bool _workerInitialized = false;
 
   CompressionService({int? maxWorkers})
-      : _worker = CompressionWorker(maxWorkers: maxWorkers);
+    : _worker = CompressionWorker(maxWorkers: maxWorkers);
 
-  Future<void> initialize() async {
-    await _worker.initialize();
-  }
+  Future<void> initialize() async {}
 
   Future<CompressionAnalysis> analyzePdf({
     required DataSource source,
@@ -36,8 +35,7 @@ class CompressionService {
       var totalOriginalSize = 0;
 
       for (var page = 0; page < pageCount; page++) {
-        final imageStream =
-            doc.extractImages(pages: PdfPages.single(page));
+        final imageStream = doc.extractImages(pages: PdfPages.single(page));
         await for (final img in imageStream) {
           final metadata = ImageMetadata(
             width: img.width,
@@ -83,15 +81,18 @@ class CompressionService {
     }
   }
 
-  Future<String> compressPdf({
+  Future<CompressedPdfResult> compressPdf({
     required String filePath,
     required CompressionOptions options,
     required String outputPath,
     ProgressCallback? onProgress,
     CancellationToken? cancelToken,
   }) async {
-    final document = await pdfrx.PdfDocument.openFile(filePath);
+    final inputFile = File(filePath);
     final outputFile = File(outputPath);
+    final temporaryFile = File('$outputPath.tmp');
+    final originalSize = await inputFile.length();
+    final document = await pdfrx.PdfDocument.openFile(filePath);
 
     try {
       final pdfDoc = pw.Document();
@@ -148,15 +149,14 @@ class CompressionService {
           final jpegBytes = img.encodeJpg(decoded, quality: options.quality);
 
           final image = pw.MemoryImage(Uint8List.fromList(jpegBytes));
-          pdfDoc.addPage(pw.Page(
-            pageFormat: PdfPageFormat(
-              pageWidth,
-              pageHeight,
+          pdfDoc.addPage(
+            pw.Page(
+              pageFormat: PdfPageFormat(pageWidth, pageHeight),
+              build: (context) => pw.Center(
+                child: pw.Image(image, width: pageWidth, height: pageHeight),
+              ),
             ),
-            build: (context) => pw.Center(
-              child: pw.Image(image, width: pageWidth, height: pageHeight),
-            ),
-          ));
+          );
         } finally {
           rendered.dispose();
         }
@@ -169,18 +169,58 @@ class CompressionService {
         throw Exception('Generated PDF is empty');
       }
 
-      await outputFile.writeAsBytes(bytes);
+      await temporaryFile.writeAsBytes(bytes);
 
-      if (!await outputFile.exists() || await outputFile.length() == 0) {
+      if (!await temporaryFile.exists() || await temporaryFile.length() == 0) {
         throw Exception('Output file is missing or empty');
       }
 
-      return outputPath;
+      final compressedSize = await temporaryFile.length();
+      if (compressedSize >= originalSize) {
+        _deleteFileIfExists(temporaryFile);
+        return CompressedPdfResult(
+          originalSize: originalSize,
+          compressedSize: compressedSize,
+        );
+      }
+
+      await _validateOutput(
+        path: temporaryFile.path,
+        expectedPageCount: totalPages,
+      );
+
+      if (cancelToken?.isCancelled == true) {
+        throw CancellationException();
+      }
+
+      _deleteFileIfExists(outputFile);
+      await temporaryFile.rename(outputFile.path);
+
+      return CompressedPdfResult(
+        outputPath: outputPath,
+        originalSize: originalSize,
+        compressedSize: compressedSize,
+      );
     } catch (e) {
       _deleteFileIfExists(outputFile);
       rethrow;
     } finally {
+      _deleteFileIfExists(temporaryFile);
       await document.dispose();
+    }
+  }
+
+  Future<void> _validateOutput({
+    required String path,
+    required int expectedPageCount,
+  }) async {
+    final outputDocument = await pdfrx.PdfDocument.openFile(path);
+    try {
+      if (outputDocument.pages.length != expectedPageCount) {
+        throw Exception('Output PDF page count does not match the input');
+      }
+    } finally {
+      await outputDocument.dispose();
     }
   }
 
@@ -198,6 +238,11 @@ class CompressionService {
     ProgressCallback? onProgress,
     CancellationToken? cancelToken,
   }) async {
+    if (!_workerInitialized) {
+      await _worker.initialize();
+      _workerInitialized = true;
+    }
+
     final stopwatch = Stopwatch()..start();
 
     final pdf = Pdf();
@@ -213,8 +258,7 @@ class CompressionService {
           throw CancellationException();
         }
 
-        final imageStream =
-            doc.extractImages(pages: PdfPages.single(page));
+        final imageStream = doc.extractImages(pages: PdfPages.single(page));
         await for (final img in imageStream) {
           allImages.add(img.data);
           originalSizes.add(img.data.length);
@@ -222,10 +266,7 @@ class CompressionService {
       }
 
       if (allImages.isEmpty) {
-        return CompressionResult(
-          originalSize: 0,
-          compressedSize: 0,
-        );
+        return CompressionResult(originalSize: 0, compressedSize: 0);
       }
 
       final processedImages = await _worker.processImages(
@@ -279,6 +320,20 @@ class CompressionService {
   }
 }
 
+class CompressedPdfResult {
+  final String? outputPath;
+  final int originalSize;
+  final int compressedSize;
+
+  const CompressedPdfResult({
+    this.outputPath,
+    required this.originalSize,
+    required this.compressedSize,
+  });
+
+  bool get wasCompressed => outputPath != null;
+}
+
 class CompressionAnalysis {
   final int totalPages;
   final int totalImages;
@@ -303,7 +358,8 @@ class CompressionAnalysis {
   int get estimatedBytesReduced => totalOriginalSize - estimatedCompressedSize;
 
   @override
-  String toString() => 'CompressionAnalysis('
+  String toString() =>
+      'CompressionAnalysis('
       'pages: $totalPages, '
       'images: $totalImages, '
       'toProcess: $imagesToProcess, '

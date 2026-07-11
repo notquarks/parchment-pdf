@@ -40,6 +40,7 @@ class _ResultScreenState extends State<ResultScreen> {
   String? _fileName;
   List<String> _filePaths = [];
   bool _completed = false;
+  bool _unchanged = false;
   String? _error;
   bool _cancelled = false;
 
@@ -83,8 +84,11 @@ class _ResultScreenState extends State<ResultScreen> {
     if (!mounted) return;
     setState(() {
       _filePaths = paths;
-      _filePath = paths.first;
-      _fileName = paths.first.split(Platform.pathSeparator).last;
+      _unchanged = paths.isEmpty;
+      if (paths.isNotEmpty) {
+        _filePath = paths.first;
+        _fileName = paths.first.split(Platform.pathSeparator).last;
+      }
       _completed = true;
     });
   }
@@ -141,13 +145,17 @@ class _ResultScreenState extends State<ResultScreen> {
                           child: SingleChildScrollView(
                             child: Column(
                               children: _filePaths.map((path) {
-                                final name = path.split(Platform.pathSeparator).last;
+                                final name = path
+                                    .split(Platform.pathSeparator)
+                                    .last;
                                 return Padding(
                                   padding: EdgeInsets.only(bottom: 4),
                                   child: Text(
                                     name,
                                     style: TextStyle(
-                                      color: Theme.of(context).colorScheme.outline,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.outline,
                                       fontSize: 12,
                                     ),
                                     softWrap: true,
@@ -264,12 +272,13 @@ class _ResultScreenState extends State<ResultScreen> {
   String get _statusMessage {
     if (_cancelled) return 'Cancelled';
     if (_error != null) return widget.messages.failure;
+    if (_completed && _unchanged) return 'Already Optimized';
     if (_completed) return widget.messages.success;
     return widget.messages.progress;
   }
 
   Widget? _bottomBar() {
-    if ((_completed && _filePath != null) || _error != null) {
+    if (_completed || _error != null) {
       return _resultActionsBar();
     }
     if (_cancelled || widget.onCancel != null) {
@@ -301,9 +310,7 @@ class _ResultScreenState extends State<ResultScreen> {
                 final files = _hasMultipleFiles
                     ? _filePaths.map((p) => XFile(p)).toList()
                     : [XFile(_filePath!)];
-                SharePlus.instance.share(
-                  ShareParams(files: files),
-                );
+                SharePlus.instance.share(ShareParams(files: files));
               },
               icon: Icon(Icons.share),
               label: Text('Share'),

@@ -30,7 +30,6 @@ class _CompressScreenState extends State<CompressScreen> {
   PdfDocumentRef? _documentRef;
   VoidCallback? _removeListener;
   int _quality = 75;
-  bool _unembedFonts = false;
   int _selectedIndex = 0;
 
   late final _controller = PdfPickController(
@@ -86,7 +85,6 @@ class _CompressScreenState extends State<CompressScreen> {
 
   Future<List<String>> _compressFiles({
     required int imageQuality,
-    required bool unembedFonts,
     required CancellationToken cancelToken,
   }) async {
     final settingsService = SettingsProvider.of(context).settingsService;
@@ -110,18 +108,20 @@ class _CompressScreenState extends State<CompressScreen> {
       final service = CompressionService();
       await service.initialize();
       try {
-        await service.compressPdf(
+        final result = await service.compressPdf(
           filePath: picked.file.path,
           options: options,
           outputPath: saveFile.path,
           cancelToken: cancelToken,
         );
+        if (result.wasCompressed) {
+          savedPaths.add(result.outputPath!);
+        }
       } finally {
         await service.dispose();
       }
 
       index++;
-      savedPaths.add(saveFile.path);
     }
     return savedPaths;
   }
@@ -131,7 +131,6 @@ class _CompressScreenState extends State<CompressScreen> {
 
     final compressFuture = _compressFiles(
       imageQuality: quality,
-      unembedFonts: _unembedFonts,
       cancelToken: cancelToken,
     );
 
@@ -170,10 +169,7 @@ class _CompressScreenState extends State<CompressScreen> {
                     files: _pickedFiles,
                     selectedIndex: _selectedIndex,
                     quality: _quality,
-                    unembedFonts: _unembedFonts,
                     onQualityChanged: (v) => setState(() => _quality = v),
-                    onUnembedFontsChanged: (v) =>
-                        setState(() => _unembedFonts = v),
                     onAddFile: _pickFile,
                     onCompress: () => _startCompress(_quality),
                     onFileSelected: _selectFile,
@@ -184,10 +180,7 @@ class _CompressScreenState extends State<CompressScreen> {
                   files: _pickedFiles,
                   selectedIndex: _selectedIndex,
                   quality: _quality,
-                  unembedFonts: _unembedFonts,
                   onQualityChanged: (v) => setState(() => _quality = v),
-                  onUnembedFontsChanged: (v) =>
-                      setState(() => _unembedFonts = v),
                   onFileSelected: _selectFile,
                 );
               },

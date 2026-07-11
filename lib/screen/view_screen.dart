@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:m3e_core/m3e_core.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdfrx/pdfrx.dart';
 
 import '../components/viewer/color_matrix_utils.dart';
+import '../components/viewer/viewer_bottom_bar.dart';
+import '../components/viewer/viewer_search_bar.dart';
 import '../components/viewer/viewer_tools_sheet.dart';
+import '../components/viewer/viewer_zoom_control.dart';
 
 class ViewScreen extends StatefulWidget {
   const ViewScreen({super.key, required this.documentRef});
@@ -27,7 +29,6 @@ class _ViewScreenState extends State<ViewScreen> {
   double _brightness = 0.0;
   BackgroundTheme _backgroundTheme = BackgroundTheme.dark;
   ScaleType _scaleType = ScaleType.fitScreen;
-  bool _cropBorders = false;
   bool _isUiVisible = true;
   bool _isZoomActive = false;
   Timer? _hideTimer;
@@ -210,7 +211,6 @@ class _ViewScreenState extends State<ViewScreen> {
         scaleType: _scaleType,
         grayscale: _grayscale,
         brightness: _brightness,
-        cropBorders: _cropBorders,
         onReadingDirectionChanged: (d) {
           setState(() => _readingDirection = d);
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -224,209 +224,6 @@ class _ViewScreenState extends State<ViewScreen> {
         },
         onGrayscaleToggled: () => setState(() => _grayscale = !_grayscale),
         onBrightnessChanged: (b) => setState(() => _brightness = b),
-        onCropBordersToggled: () =>
-            setState(() => _cropBorders = !_cropBorders),
-      ),
-    );
-  }
-
-  Widget _searchBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      color: Theme.of(context).colorScheme.surface,
-      child: Row(
-        // crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: _toggleSearch,
-          ),
-          Expanded(
-            child: TextField(
-              controller: _searchController,
-              autofocus: true,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: 'Search in document',
-                border: InputBorder.none,
-              ),
-              onSubmitted: _performSearch,
-              onChanged: (value) {
-                setState(() {});
-                if (value.isNotEmpty) _performSearch(value);
-              },
-            ),
-          ),
-          if (_searchController.text.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.clear, size: 18),
-              onPressed: () {
-                _searchController.clear();
-                _textSearcher?.resetTextSearch();
-              },
-            ),
-          if (_textSearcher != null)
-            ListenableBuilder(
-              listenable: _textSearcher!,
-              builder: (context, _) {
-                final matches = _textSearcher!.matches;
-                if (matches.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text(
-                    '${matches.length}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                );
-              },
-            ),
-          IconButton(
-            icon: const Icon(Icons.keyboard_arrow_up),
-            onPressed: _searchPrev,
-          ),
-          IconButton(
-            icon: const Icon(Icons.keyboard_arrow_down),
-            onPressed: _searchNext,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _bottomBar() {
-    final maxPage = pageCount > 1 ? pageCount.toDouble() : 1.0;
-    return Container(
-      height: kBottomNavigationBarHeight,
-      padding: const EdgeInsets.all(12),
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(28),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.max,
-        children: [
-          M3EFilledButton(
-            onPressed: pageNumber > 1 && _canNavigatePages
-                ? _goToPrevious
-                : null,
-            child: const Icon(Icons.arrow_back),
-          ),
-          Expanded(
-            child: Row(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(left: 12.0),
-                  child: Text(pageNumber.toString()),
-                ),
-                Expanded(
-                  child: Slider(
-                    value: pageNumber.toDouble(),
-                    min: 1,
-                    max: maxPage,
-                    divisions: pageCount > 1 ? pageCount - 1 : null,
-                    onChanged: pageCount > 1 ? _onSliderChanged : null,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 12.0),
-                  child: Text(pageCount.toString()),
-                ),
-              ],
-            ),
-          ),
-          M3EFilledButton(
-            onPressed: _showToolsSheet,
-            child: const Icon(Icons.tune),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 8.0),
-            child: M3EFilledButton(
-              onPressed: pageNumber < pageCount && _canNavigatePages
-                  ? _goToNext
-                  : null,
-              child: const Icon(Icons.arrow_forward),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _zoomControl() {
-    final c = _controller;
-    if (c == null) return const SizedBox.shrink();
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(28),
-      ),
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: ValueListenableBuilder<Matrix4>(
-        valueListenable: c,
-        builder: (context, value, child) {
-          final zoom = value.zoom;
-          final fitZoom = _calcFitZoom();
-          final relativePercent = ((zoom / fitZoom - 1) * 100).round();
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('$relativePercent%'),
-              IconButton(
-                onPressed: () {
-                  setState(() => _isZoomActive = true);
-                  final newPercent = (relativePercent + 10).clamp(-50, 200);
-                  final newZoom = (newPercent / 100 + 1) * fitZoom;
-                  c.setZoom(c.centerPosition, newZoom);
-                  _startHideTimer();
-                },
-                icon: const Icon(Icons.zoom_in),
-              ),
-              RotatedBox(
-                quarterTurns: 3,
-                child: SizedBox(
-                  width: 150,
-                  child: Slider(
-                    value: relativePercent.toDouble().clamp(-50, 200),
-                    min: -50,
-                    max: 200,
-                    onChangeStart: (_) {
-                      _hideTimer?.cancel();
-                      setState(() => _isZoomActive = true);
-                    },
-                    onChangeEnd: (_) {
-                      _startHideTimer();
-                    },
-                    onChanged: (newPercent) {
-                      final newZoom = (newPercent / 100 + 1) * fitZoom;
-                      c.setZoom(c.centerPosition, newZoom);
-                    },
-                  ),
-                ),
-              ),
-              IconButton(
-                onPressed: () {
-                  setState(() => _isZoomActive = true);
-                  final newPercent = (relativePercent - 10).clamp(-50, 200);
-                  final newZoom = (newPercent / 100 + 1) * fitZoom;
-                  c.setZoom(c.centerPosition, newZoom);
-                  _startHideTimer();
-                },
-                icon: const Icon(Icons.zoom_out),
-              ),
-              IconButton(
-                onPressed: () {
-                  setState(() => _isZoomActive = true);
-                  c.setZoom(c.centerPosition, fitZoom);
-                  _startHideTimer();
-                },
-                icon: const Icon(Icons.settings_backup_restore_outlined),
-              ),
-            ],
-          );
-        },
       ),
     );
   }
@@ -609,8 +406,10 @@ class _ViewScreenState extends State<ViewScreen> {
         pagePaintCallbacks: [
           if (_textSearcher != null) _textSearcher!.pageTextMatchPaintCallback,
         ],
-        matchTextColor: Colors.black,
-        activeMatchTextColor: Colors.white,
+        matchTextColor: Theme.of(context).colorScheme.primary.withAlpha(127),
+        activeMatchTextColor: Theme.of(
+          context,
+        ).colorScheme.primaryContainer.withAlpha(180),
         maxImageBytesCachedOnMemory: 50 * 1024 * 1024,
       ),
     );
@@ -632,7 +431,21 @@ class _ViewScreenState extends State<ViewScreen> {
               child: IgnorePointer(
                 ignoring: !_isUiVisible && !_isSearchVisible,
                 child: _isSearchVisible
-                    ? _searchBar()
+                    ? ViewerSearchBar(
+                        searchController: _searchController,
+                        textSearcher: _textSearcher,
+                        onToggleSearch: _toggleSearch,
+                        onSearch: (v) {
+                          setState(() {});
+                          _performSearch(v);
+                        },
+                        onSearchNext: _searchNext,
+                        onSearchPrev: _searchPrev,
+                        onClearSearch: () {
+                          _searchController.clear();
+                          _textSearcher?.resetTextSearch();
+                        },
+                      )
                     : AppBar(
                         title: Text(filePath),
                         actions: [
@@ -654,7 +467,15 @@ class _ViewScreenState extends State<ViewScreen> {
               duration: const Duration(milliseconds: 200),
               child: IgnorePointer(
                 ignoring: !_isUiVisible,
-                child: _bottomBar(),
+                child: ViewerBottomBar(
+                  pageNumber: pageNumber,
+                  pageCount: pageCount,
+                  canNavigate: _canNavigatePages,
+                  onPrevious: _goToPrevious,
+                  onNext: _goToNext,
+                  onSliderChanged: _onSliderChanged,
+                  onShowTools: _showToolsSheet,
+                ),
               ),
             ),
           ),
@@ -666,7 +487,16 @@ class _ViewScreenState extends State<ViewScreen> {
               duration: const Duration(milliseconds: 200),
               child: IgnorePointer(
                 ignoring: !_isUiVisible && !_isZoomActive,
-                child: _zoomControl(),
+                child: _controller == null
+                    ? const SizedBox.shrink()
+                    : ViewerZoomControl(
+                        controller: _controller!,
+                        fitZoom: _calcFitZoom(),
+                        onZoomActiveChanged: (v) =>
+                            setState(() => _isZoomActive = v),
+                        onStartHideTimer: _startHideTimer,
+                        onCancelHideTimer: () => _hideTimer?.cancel(),
+                      ),
               ),
             ),
           ),
