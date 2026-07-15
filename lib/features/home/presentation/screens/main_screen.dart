@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:pdf_tools/screen/files_screen.dart';
-import 'package:pdf_tools/screen/home_screen.dart';
-import 'package:pdf_tools/screen/settings_screen.dart';
-import 'package:pdf_tools/screen/tools_screen.dart';
+import 'package:pdf_tools/features/home/presentation/screens/files_screen.dart';
+import 'package:pdf_tools/features/home/presentation/screens/home_screen.dart';
+import 'package:pdf_tools/features/settings/presentation/screens/settings_screen.dart';
+import 'package:pdf_tools/features/home/presentation/screens/tools_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -20,10 +20,22 @@ class _MainScreenState extends State<MainScreen> {
     SettingsScreen(),
   ];
 
+  void _navigateToFiles() {
+    setState(() => _selectedPage = 1);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _selectedPage, children: _pages),
+      body: IndexedStack(
+        index: _selectedPage,
+        children: [
+          HomeScreen(title: 'Parchment', onViewAllFiles: _navigateToFiles),
+          FilesScreen(),
+          ToolsScreen(),
+          SettingsScreen(),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedPage,
         onDestinationSelected: (index) => setState(() => _selectedPage = index),

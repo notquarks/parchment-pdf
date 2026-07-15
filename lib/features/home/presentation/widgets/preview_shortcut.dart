@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pdf_tools/screen/view_screen.dart';
+import 'package:pdf_tools/features/viewer/presentation/screens/view_screen.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 class PreviewShortcut extends StatelessWidget {
