@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:pdf_tools/screen/compress_screen.dart';
-import 'package:pdf_tools/screen/edit_screen.dart';
-import 'package:pdf_tools/screen/main_screen.dart';
-import 'package:pdf_tools/screen/merge_screen.dart';
-import 'package:pdf_tools/screen/onboarding_screen.dart';
-import 'package:pdf_tools/screen/settings_screen.dart';
-import 'package:pdf_tools/screen/split_screen.dart';
-import 'package:pdf_tools/services/settings_provider.dart';
-import 'package:pdf_tools/services/settings_service.dart';
-import 'package:pdf_tools/services/theme_notifier.dart';
-import 'package:pdf_tools/util/pdf.dart';
+import 'package:pdf_tools/app/app.dart';
+import 'package:pdf_tools/features/settings/data/services/settings_service.dart';
+import 'package:pdf_tools/features/settings/data/services/theme_notifier.dart';
+import 'package:pdf_tools/features/home/data/services/recent_files_service.dart';
+import 'package:pdf_tools/core/utils/pdf_utils.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+export 'app/app.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,105 +24,18 @@ void main() async {
     isDark ? ThemeMode.dark : ThemeMode.light,
   );
 
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
+
+  final recentFilesService = RecentFilesService();
+  await recentFilesService.init();
+
   runApp(
     MyApp(
       settingsService: settingsService,
       themeNotifier: themeNotifier,
       onboardingDone: onboardingDone,
+      recentFilesService: recentFilesService,
     ),
   );
-}
-
-class MyApp extends StatefulWidget {
-  final SettingsService settingsService;
-  final ThemeNotifier themeNotifier;
-  final bool onboardingDone;
-
-  const MyApp({
-    super.key,
-    required this.settingsService,
-    required this.themeNotifier,
-    required this.onboardingDone,
-  });
-
-  @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
-  late bool _onboardingDone;
-
-  @override
-  void initState() {
-    super.initState();
-    _onboardingDone = widget.onboardingDone;
-    widget.themeNotifier.addListener(_onThemeChanged);
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void dispose() {
-    PaintingBinding.instance.imageCache.clear();
-    WidgetsBinding.instance.removeObserver(this);
-    widget.themeNotifier.removeListener(_onThemeChanged);
-    super.dispose();
-  }
-
-  void _onThemeChanged() => setState(() {});
-
-  @override
-  Widget build(BuildContext context) {
-    return SettingsProvider(
-      settingsService: widget.settingsService,
-      themeNotifier: widget.themeNotifier,
-      child: MaterialApp(
-        themeMode: widget.themeNotifier.value,
-        theme: ThemeData(
-          brightness: Brightness.light,
-          colorSchemeSeed: Colors.orangeAccent,
-          useMaterial3: true,
-        ),
-        darkTheme: ThemeData(
-          brightness: Brightness.dark,
-          colorSchemeSeed: Colors.orangeAccent,
-          useMaterial3: true,
-        ),
-        home: _onboardingDone
-            ? const MainScreen()
-            : _OnboardingGate(
-                settingsService: widget.settingsService,
-                themeNotifier: widget.themeNotifier,
-                onComplete: () => setState(() => _onboardingDone = true),
-              ),
-        routes: {
-          '/merge': (_) => const MergeScreen(),
-          '/split': (_) => const SplitScreen(),
-          '/compress': (_) => const CompressScreen(),
-          '/edit': (_) => const EditScreen(),
-          '/settings': (_) => const SettingsScreen(),
-        },
-      ),
-    );
-  }
-}
-
-class _OnboardingGate extends StatelessWidget {
-  const _OnboardingGate({
-    required this.settingsService,
-    required this.themeNotifier,
-    required this.onComplete,
-  });
-
-  final SettingsService settingsService;
-  final ThemeNotifier themeNotifier;
-  final VoidCallback onComplete;
-
-  @override
-  Widget build(BuildContext context) {
-    return OnboardingScreen(
-      settingsService: settingsService,
-      themeNotifier: themeNotifier,
-      onComplete: onComplete,
-    );
-  }
 }

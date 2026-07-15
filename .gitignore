@@ -18,10 +18,8 @@ migrate_working_dir/
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# VS Code
+.vscode/
 
 # Flutter/Dart/Pub related
 **/doc/api/
@@ -44,5 +42,48 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Custom changes test
-pdf_manipulator/
+# Packages - local packages should be tracked, but their build artifacts should not
+packages/**/build/
+packages/**/.dart_tool/
+packages/**/.packages
+packages/**/pubspec.lock
+packages/**/target/
+packages/**/test_build/
+packages/**/CMakeFiles/
+packages/**/CMakeCache.txt
+packages/**/example/
+packages/**/.github/
+packages/**/.githooks/
+packages/**/docs/
+packages/pdf_manipulator
+packages/qpdf_optimizer
+
+# Platform-specific build outputs
+/android/.gradle/
+/android/app/build/
+/android/build/
+/ios/Pods/
+/ios/.symlinks/
+/ios/Flutter/Flutter.framework
+/ios/Flutter/Flutter.podspec
+
+# Windows build artifacts
+/windows/flutter/ephemeral/
+
+# macOS build artifacts
+/macos/Pods/
+/macos/Flutter/ephemeral/
+
+# Test coverage
+coverage/lcov.info
+
+# Generated files
+*.g.dart
+*.freezed.dart
+*.mocks.dart
+*.gen.dart
+
+# Temp files
+*.tmp
+*.temp
+*~
