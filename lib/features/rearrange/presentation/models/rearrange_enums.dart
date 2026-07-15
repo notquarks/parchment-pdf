@@ -1,0 +1,1 @@
+enum PageCommand { earlier, later, start, end, position }

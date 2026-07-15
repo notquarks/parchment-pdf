@@ -2,22 +2,20 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
-import 'package:intl/intl.dart';
 import 'package:m3e_core/m3e_core.dart';
-import 'package:path/path.dart' as p;
-import 'package:pdf_manipulator/io.dart';
-import 'package:pdf_manipulator/pdf_manipulator.dart';
-import 'package:pdf_tools/components/loading_spinner.dart';
+import 'package:pdf_tools/core/widgets/loading_spinner.dart';
 import 'package:pdfrx/pdfrx.dart';
-import 'package:pdf_tools/components/page_small_preview.dart';
+import 'package:pdf_tools/core/widgets/page_small_preview.dart';
 
-import '../components/action_bottom_bar.dart';
-import '../model/task_messages.dart';
-import '../screen/result_screen.dart';
-import '../services/settings_provider.dart';
-import '../util/pdf.dart';
-import '../util/pdf_pick_controller.dart';
-import '../util/snackbar.dart';
+import 'package:pdf_tools/core/widgets/action_bottom_bar.dart';
+import 'package:pdf_tools/core/utils/pdf_confirmation.dart';
+import 'package:pdf_tools/core/utils/pdf_output.dart';
+import 'package:pdf_tools/core/utils/pdf_pick_controller.dart';
+import 'package:pdf_tools/core/utils/pdf_utils.dart';
+import 'package:pdf_tools/core/utils/snackbar_utils.dart';
+import 'package:path/path.dart' as p;
+import 'package:pdf_tools/features/settings/presentation/widgets/settings_provider.dart';
+import 'package:pdf_tools/features/split/split.dart';
 
 class SplitScreen extends StatefulWidget {
   const SplitScreen({super.key});
@@ -30,6 +28,8 @@ class _SplitScreenState extends State<SplitScreen> {
   File? _filePicked;
   final List<int> _selectedPage = <int>[];
   int? _pageCount;
+  String _savePath = '';
+  bool _settingsLoaded = false;
   PdfDocumentRef? _documentRef;
   VoidCallback? _removeDocListener;
   late final _controller = PdfPickController(
@@ -72,6 +72,21 @@ class _SplitScreenState extends State<SplitScreen> {
     allowMultiple: false,
     failurePrefix: 'Failed to load file',
   );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_settingsLoaded) return;
+    _settingsLoaded = true;
+    _loadSavePath();
+  }
+
+  Future<void> _loadSavePath() async {
+    final settingsService = SettingsProvider.of(context).settingsService;
+    final path = await settingsService.getSavePath();
+    if (!mounted) return;
+    setState(() => _savePath = path);
+  }
 
   void _togglePage(int page) {
     setState(() {
@@ -237,58 +252,46 @@ class _SplitScreenState extends State<SplitScreen> {
     );
   }
 
-  Future<void> _doSplit() async {
+  Future<void> _confirmAndStartSplit() async {
     if (_filePicked == null || _selectedPage.isEmpty) return;
 
-    final settingsService = SettingsProvider.of(context).settingsService;
-    final pdf = Pdf();
-
-    final savedName =
-        '${p.basenameWithoutExtension(_filePicked!.path)}_split_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
-
-    final downloadPath = await settingsService.getSavePath();
-
-    final saveDir = Directory(downloadPath);
-    if (!await saveDir.exists()) {
-      await saveDir.create(recursive: true);
-    }
-
-    final saveFile = File('${saveDir.path}/$savedName');
-    final output = await FileSink.create(saveFile);
-    final source = FileSource(_filePicked!);
-
-    try {
-      final mergeFuture = pdf
-          .extractPages(
-            source,
-            output,
-            pages: _selectedPage.map((p) => p - 1).toList(),
-          )
-          .then((_) => saveFile.path)
-          .whenComplete(() async {
-            await output.close();
-            await pdf.dispose();
-          });
-
-      if (!mounted) return;
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ResultScreen(
-            messages: TaskMessages.split,
-            fileCount: _selectedPage.length,
-            mergeFuture: mergeFuture,
-          ),
+    final savedName = pdfOutputName(
+      sourcePath: _filePicked!.path,
+      suffix: 'split_',
+    );
+    final confirmed = await showPdfConfirmation(
+      context: context,
+      title: 'Split this PDF?',
+      rows: [
+        PdfConfirmationRow(
+          label: 'File',
+          value: p.basename(_filePicked!.path),
         ),
-      );
-    } catch (e) {
-      await output.close();
-      await pdf.dispose();
-      if (mounted) {
-        showErrorSnackBar(context, 'Split failed: $e');
-      }
-    }
+        PdfConfirmationRow(
+          label: 'Pages',
+          value: '${_selectedPage.length} of $_pageCount selected',
+        ),
+        PdfConfirmationRow(label: 'Output', value: savedName),
+        PdfConfirmationRow(
+          label: 'Save to',
+          value: _savePath.isEmpty ? 'Configured save folder' : _savePath,
+        ),
+      ],
+      message: 'Original file will remain unchanged.',
+      actionIcon: Icons.call_split,
+      actionLabel: 'Split',
+    );
+
+    if (!confirmed || !mounted) return;
+    _doSplit();
+  }
+
+  Future<void> _doSplit() async {
+    await SplitOperations.performSplit(
+      context: context,
+      filePicked: _filePicked,
+      selectedPages: _selectedPage,
+    );
   }
 
   Widget? _bottomBar(BuildContext context) {
@@ -305,7 +308,7 @@ class _SplitScreenState extends State<SplitScreen> {
           child: const Icon(Icons.handyman),
         ),
         M3EButton.icon(
-          onPressed: _selectedPage.isNotEmpty ? _doSplit : null,
+          onPressed: _selectedPage.isNotEmpty ? _confirmAndStartSplit : null,
           icon: const Icon(Icons.call_split),
           label: const Text('Split'),
         ),
@@ -376,49 +379,10 @@ class _SplitScreenState extends State<SplitScreen> {
           else if (_filePicked != null)
             SliverFillRemaining(child: Center(child: LoadingSpinner(size: 0.4)))
           else
-            SliverFillRemaining(child: _noDocs(context)),
+            SliverFillRemaining(child: SplitEmptyState(onPickFile: _pickFile)),
         ],
       ),
       bottomNavigationBar: _bottomBar(context),
-    );
-  }
-
-  Widget _noDocs(BuildContext context) {
-    final shortest = MediaQuery.of(context).size.shortestSide;
-    return Column(
-      mainAxisSize: MainAxisSize.max,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        SizedBox(
-          width: shortest * 0.6,
-          height: shortest * 0.6,
-          child: AspectRatio(
-            aspectRatio: 1,
-            child: InkWell(
-              onTap: _pickFile,
-              borderRadius: BorderRadius.circular(16),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.max,
-                spacing: 12,
-                children: [
-                  Text(
-                    'Select a Document',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  M3EContainer.pill(
-                    width: shortest * 0.4,
-                    height: shortest * 0.4,
-                    color: Theme.of(context).colorScheme.primaryContainer,
-                    child: Icon(Icons.insert_drive_file, size: shortest * 0.2),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

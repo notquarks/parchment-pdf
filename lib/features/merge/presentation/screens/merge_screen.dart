@@ -1,21 +1,20 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:path/path.dart' as p;
-import 'package:pdf_manipulator/io.dart';
 import 'package:pdf_manipulator/pdf_manipulator.dart';
-import 'package:pdf_tools/model/task_messages.dart';
-import 'package:pdf_tools/screen/result_screen.dart';
-import 'package:pdf_tools/services/settings_provider.dart';
-import 'package:pdf_tools/util/pdf.dart';
-import 'package:pdf_tools/util/pdf_pick_controller.dart';
-import 'package:pdf_tools/util/snackbar.dart';
-import 'package:pdf_tools/util/string_util.dart';
+import 'package:pdf_tools/features/compression/data/models/task_messages.dart';
+import 'package:pdf_tools/features/result/presentation/screens/result_screen.dart';
+import 'package:pdf_tools/core/utils/pdf_confirmation.dart';
+import 'package:pdf_tools/core/utils/pdf_output.dart';
+import 'package:pdf_tools/core/utils/pdf_utils.dart';
+import 'package:pdf_tools/core/utils/pdf_pick_controller.dart';
+import 'package:pdf_tools/core/utils/snackbar_utils.dart';
+import 'package:pdf_tools/core/utils/string_utils.dart';
+import 'package:pdf_tools/features/settings/presentation/widgets/settings_provider.dart';
 
-import '../components/action_bottom_bar.dart';
-import '../components/item_card.dart';
+import 'package:pdf_tools/core/widgets/action_bottom_bar.dart';
+import 'package:pdf_tools/core/widgets/item_card.dart';
+import 'package:pdf_tools/features/merge/merge.dart';
 
 class MergeScreen extends StatefulWidget {
   const MergeScreen({super.key});
@@ -25,11 +24,25 @@ class MergeScreen extends StatefulWidget {
 
 class _MergeScreenState extends State<MergeScreen> {
   final List<PickedPdfInfo> _selectedFiles = [];
+  String _savePath = '';
   late final _controller = PdfPickController(
     isMounted: () => mounted,
     onEvent: _applyEvent,
     onError: (msg) => showErrorSnackBar(context, msg),
   );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadSavePath();
+  }
+
+  Future<void> _loadSavePath() async {
+    final settingsService = SettingsProvider.of(context).settingsService;
+    final path = await settingsService.getSavePath();
+    if (!mounted) return;
+    setState(() => _savePath = path);
+  }
 
   void _applyEvent(PdfFileEvent event) {
     switch (event) {
@@ -54,52 +67,47 @@ class _MergeScreenState extends State<MergeScreen> {
   int get _estimatedSize =>
       _selectedFiles.fold<int>(0, (sum, f) => sum + f.sizeBytes);
 
-  Future<String> _doMerge(
-    Pdf pdf, {
-    void Function(PdfTask<void>)? onTaskCreated,
-  }) async {
-    final settingsService = SettingsProvider.of(context).settingsService;
+  Future<void> _confirmAndStartMerge() async {
+    if (_selectedFiles.isEmpty) return;
 
-    final sources = _selectedFiles.map((f) => FileSource(f.file)).toList();
+    final savedName = pdfOutputName(
+      sourcePath: _selectedFiles.first.file.path,
+      suffix: 'merged_',
+    );
+    final confirmed = await showPdfConfirmation(
+      context: context,
+      title: _selectedFiles.length == 1
+          ? 'Merge this file?'
+          : 'Merge ${_selectedFiles.length} files?',
+      rows: [
+        PdfConfirmationRow(
+          label: 'Input',
+          value:
+              '${_selectedFiles.length} ${_selectedFiles.length == 1 ? 'file' : 'files'} • ${formatBytes(_estimatedSize, 2)}',
+        ),
+        PdfConfirmationRow(label: 'Output', value: savedName),
+        PdfConfirmationRow(
+          label: 'Save to',
+          value: _savePath.isEmpty ? 'Configured save folder' : _savePath,
+        ),
+      ],
+      message: 'Original files will remain unchanged.',
+      actionIcon: Icons.merge,
+      actionLabel: 'Merge',
+    );
 
-    final savedName =
-        '${p.basenameWithoutExtension(_selectedFiles.first.file.path)}_merged_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
-
-    final downloadPath = await settingsService.getSavePath();
-
-    final saveDir = Directory(downloadPath);
-    if (!await saveDir.exists()) {
-      await saveDir.create(recursive: true);
-    }
-
-    final saveFile = File('${saveDir.path}/$savedName');
-    final output = await FileSink.create(saveFile);
-    final totalSize = _selectedFiles.fold<int>(0, (sum, f) => sum + f.sizeBytes);
-    final sw = Stopwatch()..start();
-    final task = pdf.merge(sources, output);
-    onTaskCreated?.call(task);
-    try {
-      await task;
-      sw.stop();
-      debugPrint('PDF merge: ${sw.elapsedMilliseconds}ms | ${_selectedFiles.length} files, ${(totalSize / 1024 / 1024).toStringAsFixed(1)}MB total');
-    } on PdfCancelled {
-      await output.close();
-      if (await saveFile.exists()) {
-        await saveFile.delete();
-      }
-      rethrow;
-    } finally {
-      await output.close();
-    }
-    return saveFile.path;
+    if (!confirmed || !mounted) return;
+    _startMerge();
   }
 
   void _startMerge() {
     final pdf = Pdf();
     PdfTask<void>? mergeTask;
 
-    final mergeFuture = _doMerge(
-      pdf,
+    final mergeFuture = MergeOperations.performMerge(
+      context: context,
+      selectedFiles: _selectedFiles,
+      pdf: pdf,
       onTaskCreated: (t) => mergeTask = t,
     ).whenComplete(() => pdf.dispose());
 
@@ -162,45 +170,6 @@ class _MergeScreenState extends State<MergeScreen> {
     );
   }
 
-  Widget _noDocs(context) {
-    final shortest = MediaQuery.of(context).size.shortestSide;
-    return Column(
-      mainAxisSize: .max,
-      crossAxisAlignment: .center,
-      mainAxisAlignment: .center,
-      children: [
-        SizedBox(
-          width: shortest * 0.6,
-          height: shortest * 0.6,
-          child: AspectRatio(
-            aspectRatio: 1,
-            child: InkWell(
-              onTap: _pickFiles,
-              borderRadius: BorderRadius.circular(16),
-              child: Column(
-                mainAxisAlignment: .center,
-                mainAxisSize: .max,
-                spacing: 12,
-                children: [
-                  Text(
-                    'Select Documents',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  M3EContainer.pill(
-                    width: shortest * 0.4,
-                    height: shortest * 0.4,
-                    color: Theme.of(context).colorScheme.primaryContainer,
-                    child: Icon(Icons.playlist_add, size: shortest * 0.2),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget? _bottomBar(BuildContext context) {
     if (_selectedFiles.isEmpty) return null;
     return ActionBottomBar(
@@ -213,7 +182,7 @@ class _MergeScreenState extends State<MergeScreen> {
           child: const Icon(Icons.add),
         ),
         M3EButton.icon(
-          onPressed: _startMerge,
+          onPressed: _confirmAndStartMerge,
           icon: const Icon(Icons.merge),
           label: const Text('Merge'),
         ),
@@ -248,7 +217,9 @@ class _MergeScreenState extends State<MergeScreen> {
               itemBuilder: _sortableFileItem,
             ),
           ] else
-            SliverFillRemaining(child: _noDocs(context)),
+            SliverFillRemaining(
+              child: MergeEmptyState(onPickFiles: _pickFiles),
+            ),
         ],
       ),
       bottomNavigationBar: _bottomBar(context),
