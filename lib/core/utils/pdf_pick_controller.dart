@@ -1,4 +1,4 @@
-import 'package:pdf_tools/util/pdf.dart';
+import 'package:pdf_tools/core/utils/pdf_utils.dart';
 
 class PdfPickController {
   PdfPickController({
