@@ -17,6 +17,12 @@ class TaskMessages {
     success: 'Successfully Split!',
   );
 
+  static const rearrange = TaskMessages(
+    title: 'Rearrange',
+    progress: 'Rearranging…',
+    success: 'Successfully Rearranged!',
+  );
+
   static const merge = TaskMessages(
     title: 'Merge',
     progress: 'Merging…',

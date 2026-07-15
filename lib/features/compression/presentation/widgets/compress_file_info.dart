@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
-import 'package:pdf_tools/util/pdf.dart';
-import 'package:pdf_tools/util/string_util.dart';
+import 'package:pdf_tools/core/utils/pdf_utils.dart';
+import 'package:pdf_tools/core/utils/string_utils.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:shimmer/shimmer.dart';
 

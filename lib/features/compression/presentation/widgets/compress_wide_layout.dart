@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:pdf_tools/components/compress/compress_controls.dart';
-import 'package:pdf_tools/components/compress/compress_file_info.dart';
-import 'package:pdf_tools/components/compress/compress_inline_actions.dart';
-import 'package:pdf_tools/components/compress/file_preview_navigator.dart';
-import 'package:pdf_tools/util/pdf.dart';
+import 'package:pdf_tools/core/utils/pdf_utils.dart';
+import 'package:pdf_tools/features/compression/presentation/widgets/compress_controls.dart';
+import 'package:pdf_tools/features/compression/presentation/widgets/compress_file_info.dart';
+import 'package:pdf_tools/features/compression/presentation/widgets/compress_inline_actions.dart';
+import 'package:pdf_tools/features/compression/presentation/widgets/compress_preview_card.dart';
+import 'package:pdf_tools/features/compression/presentation/widgets/file_preview_navigator.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 class CompressWideLayout extends StatelessWidget {
@@ -30,32 +31,34 @@ class CompressWideLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (files.isEmpty || selectedIndex < 0 || selectedIndex >= files.length) {
+      return const SizedBox.shrink();
+    }
+
+    final selectedFile = files[selectedIndex];
+
     return Padding(
-      padding: const EdgeInsets.all(12.0),
+      padding: const EdgeInsets.all(12),
       child: Row(
-        mainAxisSize: MainAxisSize.max,
         crossAxisAlignment: CrossAxisAlignment.start,
         spacing: 24,
         children: [
           Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FilePreviewNavigator(
-                  documentRef: documentRef,
-                  selectedIndex: selectedIndex,
-                  totalFiles: files.length,
-                  onPrevious: () => onFileSelected(selectedIndex - 1),
-                  onNext: () => onFileSelected(selectedIndex + 1),
-                  compact: true,
-                ),
-              ],
+            child: FilePreviewNavigator(
+              documentRef: documentRef,
+              file: selectedFile,
+              selectedIndex: selectedIndex,
+              totalFiles: files.length,
+              onPrevious: () => onFileSelected(selectedIndex - 1),
+              onNext: () => onFileSelected(selectedIndex + 1),
+              layout: CompressPreviewLayout.expanded,
+              compact: true,
             ),
           ),
           Expanded(
             child: Column(
-              spacing: 16,
               crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 16,
               children: [
                 CompressFileInfo(
                   documentRef: documentRef,

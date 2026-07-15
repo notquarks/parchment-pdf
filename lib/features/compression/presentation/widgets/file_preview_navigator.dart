@@ -1,23 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:pdf_tools/components/compress/compress_preview_card.dart';
+import 'package:pdf_tools/core/utils/pdf_utils.dart';
+import 'package:pdf_tools/features/compression/presentation/widgets/compress_preview_card.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 class FilePreviewNavigator extends StatelessWidget {
   const FilePreviewNavigator({
     super.key,
     required this.documentRef,
+    required this.file,
     required this.selectedIndex,
     required this.totalFiles,
     required this.onPrevious,
     required this.onNext,
+    this.layout = CompressPreviewLayout.compact,
     this.compact = false,
   });
 
   final PdfDocumentRef documentRef;
+  final PickedPdfInfo file;
   final int selectedIndex;
   final int totalFiles;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
+  final CompressPreviewLayout layout;
   final bool compact;
 
   bool get _hasPrevious => selectedIndex > 0;
@@ -26,39 +31,40 @@ class FilePreviewNavigator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final preview = CompressPreviewCard(
+      documentRef: documentRef,
+      file: file,
+      layout: layout,
+    );
+
     if (!_hasMultipleFiles) {
-      return CompressPreviewCard(documentRef: documentRef);
+      return preview;
     }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        if (!compact)
+        if (compact)
+          preview
+        else
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               _NavArrow(
                 icon: Icons.chevron_left,
                 enabled: _hasPrevious,
                 onPressed: onPrevious,
               ),
-              CompressPreviewCard(documentRef: documentRef),
+              Expanded(child: preview),
               _NavArrow(
                 icon: Icons.chevron_right,
                 enabled: _hasNext,
                 onPressed: onNext,
               ),
             ],
-          )
-        else
-          CompressPreviewCard(documentRef: documentRef),
-        if (!compact) ...[
-          Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: _FileCounter(current: selectedIndex + 1, total: totalFiles),
           ),
+        if (!compact) ...[
+          const SizedBox(height: 8),
+          _FileCounter(current: selectedIndex + 1, total: totalFiles),
         ],
       ],
     );
@@ -78,14 +84,8 @@ class _NavArrow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return IconButton(
-      iconSize: 28,
-      style: IconButton.styleFrom(
-        foregroundColor: enabled
-            ? colorScheme.primary
-            : colorScheme.onSurface.withValues(alpha: 0.3),
-      ),
+      tooltip: icon == Icons.chevron_left ? 'Previous file' : 'Next file',
       onPressed: enabled ? onPressed : null,
       icon: Icon(icon),
     );
@@ -100,21 +100,9 @@ class _FileCounter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: colorScheme.primaryContainer,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Text(
-        '$current / $total',
-        style: TextStyle(
-          color: colorScheme.onPrimaryContainer,
-          fontWeight: FontWeight.w500,
-          fontSize: 12,
-        ),
-      ),
+    return Text(
+      '$current of $total',
+      style: Theme.of(context).textTheme.labelLarge,
     );
   }
 }

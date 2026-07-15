@@ -1,8 +1,9 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 
-import 'compression_options.dart';
+import '../models/compression_options.dart';
 
 class ImageProcessor {
   static Future<ProcessedImage?> processImage({
@@ -11,10 +12,10 @@ class ImageProcessor {
     int sourceDpi = 72,
     bool convertToGrayscale = false,
   }) async {
+    if (imageBytes.isEmpty) return null;
+
     final image = img.decodeImage(imageBytes);
-    if (image == null) {
-      return null;
-    }
+    if (image == null) return null;
 
     final originalWidth = image.width;
     final originalHeight = image.height;
@@ -24,17 +25,21 @@ class ImageProcessor {
       return null;
     }
 
-    final targetWidth = options.targetWidth(originalWidth, sourceDpi);
-    final targetHeight = options.targetHeight(originalHeight, sourceDpi);
+    final (targetWidth, targetHeight) = options.targetDimensions(
+      originalWidth,
+      originalHeight,
+      sourceDpi,
+    );
 
     final needsResize =
         targetWidth != originalWidth || targetHeight != originalHeight;
-
     final needsGrayscale =
-        convertToGrayscale && image.numChannels >= 3;
+        (convertToGrayscale || options.convertToGrayscale) &&
+        image.numChannels >= 3;
+    final canRecompressOriginal =
+        options.recompressJpeg && _isJpegBytes(imageBytes);
 
-    if (!needsResize && !needsGrayscale && options.recompressJpeg) {
-    } else if (!needsResize && !needsGrayscale) {
+    if (!needsResize && !needsGrayscale && !canRecompressOriginal) {
       return null;
     }
 
@@ -53,20 +58,34 @@ class ImageProcessor {
       );
     }
 
-    final jpegBytes = Uint8List.fromList(
-      img.encodeJpg(processedImage, quality: options.quality),
-    );
+    final hasAlpha = processedImage.numChannels == 2 ||
+        processedImage.numChannels == 4;
+    final Uint8List encodedBytes;
+    final String outputFormat;
 
-    final newSize = jpegBytes.length;
+    if (hasAlpha) {
+      encodedBytes = Uint8List.fromList(img.encodePng(processedImage));
+      outputFormat = 'png';
+    } else {
+      encodedBytes = Uint8List.fromList(
+        img.encodeJpg(
+          processedImage,
+          quality: options.quality.clamp(1, 100).toInt(),
+        ),
+      );
+      outputFormat = 'jpeg';
+    }
 
-    final wasModified = needsResize || needsGrayscale || newSize < originalSize;
+    final newSize = encodedBytes.length;
+    final bytesSaved = originalSize - newSize;
 
-    if (!wasModified) {
+    final minimumUsefulSaving = math.max(64, (originalSize * 0.005).round());
+    if (bytesSaved < minimumUsefulSaving) {
       return null;
     }
 
     return ProcessedImage(
-      bytes: jpegBytes,
+      bytes: encodedBytes,
       originalWidth: originalWidth,
       originalHeight: originalHeight,
       newWidth: processedImage.width,
@@ -74,6 +93,7 @@ class ImageProcessor {
       originalSize: originalSize,
       newSize: newSize,
       wasModified: true,
+      outputFormat: outputFormat,
     );
   }
 
@@ -105,18 +125,32 @@ class ImageProcessor {
     required CompressionOptions options,
     int sourceDpi = 72,
   }) {
-    if (!options.shouldProcess(width, height)) {
+    if (currentSize <= 0 || !options.shouldProcess(width, height)) {
       return 1.0;
     }
 
-    final qualityRatio = options.quality / 100.0;
+    final (targetWidth, targetHeight) = options.targetDimensions(
+      width,
+      height,
+      sourceDpi,
+    );
+    final sourcePixels = width * height;
+    final targetPixels = targetWidth * targetHeight;
+    final pixelRatio = sourcePixels > 0 ? targetPixels / sourcePixels : 1.0;
 
-    double dpiRatio = 1.0;
-    if (options.downscale && sourceDpi > options.dpiThreshold) {
-      dpiRatio = options.dpiTarget / sourceDpi;
+    final normalizedQuality = options.quality.clamp(1, 100) / 100.0;
+    final qualityRatio =
+        0.12 + 0.88 * math.pow(normalizedQuality, 1.65).toDouble();
+    final estimatedRatio =
+        (pixelRatio * qualityRatio).clamp(0.05, 1.0).toDouble();
+
+    final estimatedSize = (currentSize * estimatedRatio).round();
+    final minimumUsefulSaving = math.max(64, (currentSize * 0.005).round());
+    if (currentSize - estimatedSize < minimumUsefulSaving) {
+      return 1.0;
     }
 
-    return qualityRatio * dpiRatio * dpiRatio;
+    return estimatedRatio;
   }
 
   static bool isFormatSupported(String format) {
@@ -127,5 +161,12 @@ class ImageProcessor {
   static bool isJpeg(String format) {
     final lower = format.toLowerCase();
     return lower == 'jpeg' || lower == 'jpg';
+  }
+
+  static bool _isJpegBytes(Uint8List bytes) {
+    return bytes.length >= 3 &&
+        bytes[0] == 0xff &&
+        bytes[1] == 0xd8 &&
+        bytes[2] == 0xff;
   }
 }

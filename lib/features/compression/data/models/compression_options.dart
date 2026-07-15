@@ -9,6 +9,7 @@ class ProcessedImage {
   final int originalSize;
   final int newSize;
   final bool wasModified;
+  final String outputFormat;
 
   const ProcessedImage({
     required this.bytes,
@@ -19,6 +20,7 @@ class ProcessedImage {
     required this.originalSize,
     required this.newSize,
     required this.wasModified,
+    this.outputFormat = 'jpeg',
   });
 
   double get reductionPercent =>
@@ -27,12 +29,9 @@ class ProcessedImage {
   int get bytesReduced => originalSize - newSize;
 }
 
-enum CompressionPreset {
-  light,
-  balanced,
-  aggressive,
-  extreme,
-}
+enum CompressionPreset { light, balanced, aggressive, extreme }
+
+enum PdfCompressionMode { structural, imageOptimized, extremeRaster }
 
 class _PresetConfig {
   final int quality;
@@ -77,6 +76,7 @@ class CompressionOptions {
   final bool recompressJpeg;
   final bool downscale;
   final bool convertToGrayscale;
+  final PdfCompressionMode mode;
 
   const CompressionOptions({
     required this.quality,
@@ -86,6 +86,7 @@ class CompressionOptions {
     this.recompressJpeg = true,
     this.downscale = true,
     this.convertToGrayscale = false,
+    this.mode = PdfCompressionMode.structural,
   });
 
   factory CompressionOptions.fromPreset(CompressionPreset preset) {
@@ -98,42 +99,88 @@ class CompressionOptions {
   }
 
   factory CompressionOptions.withQuality(int quality) {
-    final config = _presetConfigs[CompressionPreset.balanced]!;
+    final safeQuality = quality.clamp(1, 100).toInt();
+
+    final (dpiTarget, dpiThreshold) = switch (safeQuality) {
+      >= 90 => (200, 240),
+      >= 80 => (150, 200),
+      >= 65 => (120, 150),
+      >= 50 => (96, 120),
+      _ => (72, 96),
+    };
+
     return CompressionOptions(
-      quality: quality,
-      dpiTarget: config.dpiTarget,
-      dpiThreshold: config.dpiThreshold,
+      quality: safeQuality,
+      dpiTarget: dpiTarget,
+      dpiThreshold: dpiThreshold,
+    );
+  }
+
+  CompressionOptions copyWith({
+    int? quality,
+    int? dpiTarget,
+    int? dpiThreshold,
+    int? minSize,
+    bool? recompressJpeg,
+    bool? downscale,
+    bool? convertToGrayscale,
+    PdfCompressionMode? mode,
+  }) {
+    return CompressionOptions(
+      quality: (quality ?? this.quality).clamp(1, 100).toInt(),
+      dpiTarget: dpiTarget ?? this.dpiTarget,
+      dpiThreshold: dpiThreshold ?? this.dpiThreshold,
+      minSize: minSize ?? this.minSize,
+      recompressJpeg: recompressJpeg ?? this.recompressJpeg,
+      downscale: downscale ?? this.downscale,
+      convertToGrayscale: convertToGrayscale ?? this.convertToGrayscale,
+      mode: mode ?? this.mode,
+    );
+  }
+
+  (int width, int height) targetDimensions(
+    int sourceWidth,
+    int sourceHeight,
+    int sourceDpi,
+  ) {
+    if (!downscale ||
+        sourceWidth <= 0 ||
+        sourceHeight <= 0 ||
+        sourceDpi <= dpiThreshold) {
+      return (sourceWidth, sourceHeight);
+    }
+
+    final scale = (dpiTarget / sourceDpi).clamp(0.0, 1.0);
+    return (
+      (sourceWidth * scale).round().clamp(1, sourceWidth).toInt(),
+      (sourceHeight * scale).round().clamp(1, sourceHeight).toInt(),
     );
   }
 
   int targetWidth(int sourceWidth, int sourceDpi) {
-    if (!downscale || sourceDpi <= dpiThreshold) {
-      return sourceWidth;
-    }
-    return (sourceWidth * dpiTarget / sourceDpi).round().clamp(1, sourceWidth);
+    return targetDimensions(sourceWidth, 1, sourceDpi).$1;
   }
 
   int targetHeight(int sourceHeight, int sourceDpi) {
-    if (!downscale || sourceDpi <= dpiThreshold) {
-      return sourceHeight;
-    }
-    return (sourceHeight * dpiTarget / sourceDpi)
-        .round()
-        .clamp(1, sourceHeight);
+    return targetDimensions(1, sourceHeight, sourceDpi).$2;
   }
 
   bool shouldProcess(int width, int height) {
+    if (width <= 0 || height <= 0) return false;
     return width >= minSize || height >= minSize;
   }
 
   @override
-  String toString() => 'CompressionOptions('
+  String toString() =>
+      'CompressionOptions('
       'quality: $quality, '
       'dpiTarget: $dpiTarget, '
       'dpiThreshold: $dpiThreshold, '
       'minSize: $minSize, '
       'recompressJpeg: $recompressJpeg, '
-      'downscale: $downscale'
+      'downscale: $downscale, '
+      'convertToGrayscale: $convertToGrayscale, '
+      'mode: $mode'
       ')';
 }
 
@@ -156,14 +203,14 @@ class CompressionResult {
     this.processedImages = const [],
   });
 
-  double get reductionPercent => originalSize > 0
-      ? (1 - compressedSize / originalSize) * 100
-      : 0;
+  double get reductionPercent =>
+      originalSize > 0 ? (1 - compressedSize / originalSize) * 100 : 0;
 
   int get bytesReduced => originalSize - compressedSize;
 
   @override
-  String toString() => 'CompressionResult('
+  String toString() =>
+      'CompressionResult('
       'processed: $imagesProcessed, '
       'skipped: $imagesSkipped, '
       'failed: $imagesFailed, '
@@ -198,14 +245,12 @@ class ImageMetadata {
   }
 
   (int width, int height) targetDimensions(CompressionOptions options) {
-    return (
-      options.targetWidth(width, estimatedDpi),
-      options.targetHeight(height, estimatedDpi),
-    );
+    return options.targetDimensions(width, height, estimatedDpi);
   }
 
   @override
-  String toString() => 'ImageMetadata('
+  String toString() =>
+      'ImageMetadata('
       'xref: $xref, '
       '${width}x$height, '
       '$format, '
