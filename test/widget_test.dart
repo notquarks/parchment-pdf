@@ -7,28 +7,46 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:pdf_tools/main.dart';
-import 'package:pdf_tools/services/settings_service.dart';
-import 'package:pdf_tools/services/theme_notifier.dart';
+import 'package:pdf_tools/features/settings/data/services/settings_service.dart';
+import 'package:pdf_tools/features/settings/data/services/theme_notifier.dart';
+import 'package:pdf_tools/features/home/data/services/recent_files_service.dart';
+import 'package:pdf_tools/features/home/data/models/recent_file.dart';
 
 void main() {
   testWidgets('App renders smoke test', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    final settingsService = SettingsService();
-    await settingsService.init();
+    final settingsService = _FakeSettingsService();
     final themeNotifier = ThemeNotifier(ThemeMode.light);
+    final recentFilesService = _FakeRecentFilesService();
 
-    // Build our app and trigger a frame.
     await tester.pumpWidget(MyApp(
       settingsService: settingsService,
       themeNotifier: themeNotifier,
       onboardingDone: true,
+      recentFilesService: recentFilesService,
     ));
 
-    // Verify the app renders with navigation.
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Files'), findsOneWidget);
   });
+}
+
+class _FakeSettingsService extends SettingsService {
+  @override
+  Future<String> getSavePath() async => '';
+}
+
+class _FakeRecentFilesService extends RecentFilesService {
+  @override
+  Future<void> init() async {}
+
+  @override
+  Future<List<RecentFile>> getRecentFiles() async => [];
+
+  @override
+  Future<void> addRecentFile(RecentFile file) async {}
+
+  @override
+  Future<void> clearRecentFiles() async {}
 }

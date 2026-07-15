@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pdf_tools/model/task_messages.dart';
+import 'package:pdf_tools/features/compression/data/models/task_messages.dart';
 
 void main() {
   group('TaskMessages', () {
