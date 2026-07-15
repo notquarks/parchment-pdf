@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:pdf_tools/services/settings_service.dart';
-import 'package:pdf_tools/services/theme_notifier.dart';
+import 'package:pdf_tools/features/settings/data/services/settings_service.dart';
+import 'package:pdf_tools/features/settings/data/services/theme_notifier.dart';
 
 class SettingsProvider extends InheritedWidget {
   final SettingsService settingsService;

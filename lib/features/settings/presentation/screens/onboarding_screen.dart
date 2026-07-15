@@ -1,9 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:pdf_tools/services/settings_service.dart';
-import 'package:pdf_tools/services/theme_notifier.dart';
-import 'package:pdf_tools/util/storage_helper.dart';
+import 'package:pdf_tools/features/settings/data/services/settings_service.dart';
+import 'package:pdf_tools/features/settings/data/services/theme_notifier.dart';
+import 'package:pdf_tools/core/utils/storage_helper.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final SettingsService settingsService;

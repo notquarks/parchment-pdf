@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:pdf_manipulator/pdf_manipulator.dart';
-import 'package:pdf_tools/compression/compression.dart';
-import 'package:pdf_tools/components/loading_spinner.dart';
+import 'package:pdf_tools/features/compression/data/services/compression_worker.dart';
+import 'package:pdf_tools/features/home/data/models/recent_file.dart';
+import 'package:pdf_tools/features/home/presentation/providers/recent_files_provider.dart';
+import 'package:pdf_tools/core/widgets/loading_spinner.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:pdf_tools/model/task_messages.dart';
+import 'package:pdf_tools/features/compression/data/models/task_messages.dart';
 
 class ResultScreen extends StatefulWidget {
   const ResultScreen({
@@ -78,6 +80,7 @@ class _ResultScreenState extends State<ResultScreen> {
       _filePaths = [path];
       _completed = true;
     });
+    _saveToRecent(path);
   }
 
   void _onMultiSuccess(List<String> paths) {
@@ -91,6 +94,20 @@ class _ResultScreenState extends State<ResultScreen> {
       }
       _completed = true;
     });
+    if (paths.isNotEmpty) {
+      _saveToRecent(paths.first);
+    }
+  }
+
+  void _saveToRecent(String path) {
+    final service = RecentFilesProvider.of(context);
+    service.addRecentFile(RecentFile(
+      filePath: path,
+      fileName: path.split(Platform.pathSeparator).last,
+      operationType: widget.messages.title.toLowerCase(),
+      inputFileCount: widget.fileCount,
+      timestamp: DateTime.now().millisecondsSinceEpoch,
+    ));
   }
 
   void _onError(Object e) {

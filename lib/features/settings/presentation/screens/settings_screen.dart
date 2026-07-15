@@ -1,12 +1,12 @@
-import 'package:pdf_tools/screen/onboarding_screen.dart';
+import 'package:pdf_tools/features/settings/presentation/screens/onboarding_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:pdf_tools/components/m3_flex_space.dart';
-import 'package:pdf_tools/services/settings_provider.dart';
-import 'package:pdf_tools/services/settings_service.dart';
-import 'package:pdf_tools/services/theme_notifier.dart';
-import 'package:pdf_tools/util/storage_helper.dart';
+import 'package:pdf_tools/features/home/presentation/widgets/m3_flex_space.dart';
+import 'package:pdf_tools/features/settings/presentation/widgets/settings_provider.dart';
+import 'package:pdf_tools/features/settings/data/services/settings_service.dart';
+import 'package:pdf_tools/features/settings/data/services/theme_notifier.dart';
+import 'package:pdf_tools/core/utils/storage_helper.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
