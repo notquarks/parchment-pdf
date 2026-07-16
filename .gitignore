@@ -87,3 +87,6 @@ coverage/lcov.info
 *.tmp
 *.temp
 *~
+
+# FVM Version Cache
+.fvm/

@@ -1,8 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:pdf_tools/features/home/data/models/recent_file.dart';
 
-class RecentFilesService {
+class RecentFilesService extends ChangeNotifier {
   static const _dbName = 'recent_files.db';
   static const _table = 'recent_files';
   static const _maxFiles = 50;
@@ -43,9 +44,11 @@ class RecentFilesService {
       }
     }
     await _db.insert(_table, file.toJson());
+    notifyListeners();
   }
 
   Future<void> clearRecentFiles() async {
     await _db.delete(_table);
+    notifyListeners();
   }
 }

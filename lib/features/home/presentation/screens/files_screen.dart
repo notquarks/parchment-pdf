@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:pdf_tools/core/widgets/item_card.dart';
 import 'package:pdf_tools/features/home/data/models/recent_file.dart';
@@ -20,20 +21,10 @@ class _FilesScreenState extends State<FilesScreen> {
   List<RecentFile> _filteredFiles = [];
   final _searchController = TextEditingController();
 
-  bool _loaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-  }
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_loaded) {
-      _loaded = true;
-      _loadFiles();
-    }
+    _loadFiles();
   }
 
   @override
@@ -45,6 +36,7 @@ class _FilesScreenState extends State<FilesScreen> {
   Future<void> _loadFiles() async {
     final service = RecentFilesProvider.of(context);
     final files = await service.getRecentFiles();
+    if (!mounted) return;
     setState(() {
       _allFiles = files;
       _applyFilter();
@@ -63,8 +55,9 @@ class _FilesScreenState extends State<FilesScreen> {
 
     switch (_fileFilterIndex) {
       case 1:
-        final sevenDaysAgo =
-            DateTime.now().subtract(const Duration(days: 7)).millisecondsSinceEpoch;
+        final sevenDaysAgo = DateTime.now()
+            .subtract(const Duration(days: 7))
+            .millisecondsSinceEpoch;
         filtered = filtered.where((f) => f.timestamp >= sevenDaysAgo).toList();
         break;
       case 2:
@@ -84,24 +77,9 @@ class _FilesScreenState extends State<FilesScreen> {
     });
   }
 
-  IconData _iconForOperation(String type) {
-    switch (type) {
-      case 'compress':
-        return Icons.compress;
-      case 'merge':
-        return Icons.merge;
-      case 'split':
-        return Icons.call_split;
-      case 'rearrange':
-        return Icons.reorder;
-      default:
-        return Icons.insert_drive_file;
-    }
-  }
-
   String _formatTimestamp(int timestamp) {
     final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
-    return '${date.day}/${date.month}/${date.year}';
+    return '${date.day}/${date.month}/${date.year} - ${date.hour}:${date.minute}';
   }
 
   @override
@@ -172,7 +150,7 @@ class _FilesScreenState extends State<FilesScreen> {
                 final file = _filteredFiles[index];
                 return ItemCard(
                   title: file.fileName,
-                  icon: Icon(_iconForOperation(file.operationType)),
+                  icon: Icon(Symbols.docs),
                   subtitle:
                       '${file.inputFileCount} files • ${_formatTimestamp(file.timestamp)}',
                   onTap: () => OpenFilex.open(file.filePath),

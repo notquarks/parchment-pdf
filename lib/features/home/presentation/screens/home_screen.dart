@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:m3e_core/m3e_core.dart';
+import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:pdf_tools/core/widgets/item_card.dart';
 import 'package:pdf_tools/features/home/data/models/recent_file.dart';
@@ -20,43 +21,19 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<RecentFile> _recentFiles = [];
 
-  bool _loaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-  }
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_loaded) {
-      _loaded = true;
-      _loadRecentFiles();
-    }
+    _loadRecentFiles();
   }
 
   Future<void> _loadRecentFiles() async {
     final service = RecentFilesProvider.of(context);
     final files = await service.getRecentFiles();
+    if (!mounted) return;
     setState(() {
       _recentFiles = files.take(10).toList();
     });
-  }
-
-  IconData _iconForOperation(String type) {
-    switch (type) {
-      case 'compress':
-        return Icons.compress;
-      case 'merge':
-        return Icons.merge;
-      case 'split':
-        return Icons.call_split;
-      case 'rearrange':
-        return Icons.reorder;
-      default:
-        return Icons.insert_drive_file;
-    }
   }
 
   String _formatTimestamp(int timestamp) {
@@ -104,8 +81,9 @@ class _HomeScreenState extends State<HomeScreen> {
               final cardWidth = usable / crossAxisCount;
               final compact = cardWidth < ItemCard.gridBreakpoint;
               final cardHeight = compact ? cardHeightCompact : cardHeightWide;
-              final childAspectRatio =
-                  cardWidth > 0 ? cardWidth / cardHeight : 1.0;
+              final childAspectRatio = cardWidth > 0
+                  ? cardWidth / cardHeight
+                  : 1.0;
               return SliverGrid(
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: crossAxisCount,
@@ -161,7 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 final file = _recentFiles[index];
                 return ItemCard(
                   title: file.fileName,
-                  icon: Icon(_iconForOperation(file.operationType)),
+                  icon: Icon(Symbols.docs),
                   subtitle: _formatTimestamp(file.timestamp),
                   onTap: () => OpenFilex.open(file.filePath),
                 );

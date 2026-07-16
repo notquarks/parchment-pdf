@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:pdf_tools/app/app.dart';
 import 'package:pdf_tools/features/settings/data/services/settings_service.dart';
@@ -24,8 +26,10 @@ void main() async {
     isDark ? ThemeMode.dark : ThemeMode.light,
   );
 
-  sqfliteFfiInit();
-  databaseFactory = databaseFactoryFfi;
+  if (Platform.isWindows || Platform.isLinux) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
 
   final recentFilesService = RecentFilesService();
   await recentFilesService.init();
