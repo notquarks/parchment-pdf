@@ -186,13 +186,19 @@ class RearrangePageCard extends StatelessWidget {
     );
   }
   
-  static Widget buildDragFeedback(BuildContext context, int index, PdfDocumentRef documentRef, int totalPageCount) {
+  static Widget buildDragFeedback(
+    BuildContext context,
+    int index,
+    int pageNumber,
+    PdfDocumentRef documentRef,
+    int totalPageCount,
+  ) {
     final mediaQuery = MediaQuery.of(context);
     final width = mediaQuery.size.width < RearrangeConstants.compactBreakpoint
         ? RearrangeConstants.compactCardExtent
         : RearrangeConstants.mediumCardExtent;
     final compact = mediaQuery.size.width < RearrangeConstants.compactBreakpoint;
-    
+
     return MediaQuery(
       data: mediaQuery,
       child: Material(
@@ -206,7 +212,7 @@ class RearrangePageCard extends StatelessWidget {
               height: width / RearrangeConstants.cardAspectRatio,
               child: RearrangePageCard(
                 index: index,
-                pageNumber: 0,
+                pageNumber: pageNumber,
                 isSelected: false,
                 isDropTarget: false,
                 compact: compact,

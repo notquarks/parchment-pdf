@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:pdf_tools/features/compression/presentation/screens/compress_screen.dart';
 import 'package:pdf_tools/features/merge/presentation/screens/merge_screen.dart';
+import 'package:pdf_tools/features/settings/presentation/screens/advanced_screen.dart';
+import 'package:pdf_tools/features/settings/presentation/screens/viewersett_screen.dart';
 import 'package:pdf_tools/features/split/presentation/screens/split_screen.dart';
 import 'package:pdf_tools/features/rearrange/rearrange.dart';
 import 'package:pdf_tools/features/settings/presentation/screens/settings_screen.dart';
@@ -12,6 +14,8 @@ class AppRoutes {
   static const String split = '/split';
   static const String rearrange = '/rearrange';
   static const String settings = '/settings';
+  static const String viewer_settings = '/viewer_settings';
+  static const String advanced_settings = '/advanced_settings';
 
   static Map<String, WidgetBuilder> get routes => {
     compress: (context) => const CompressScreen(),
@@ -19,5 +23,7 @@ class AppRoutes {
     split: (context) => const SplitScreen(),
     rearrange: (context) => const RearrangeScreen(),
     settings: (context) => const SettingsScreen(),
+    viewer_settings: (context) => const ViewerSettingsScreen(),
+    advanced_settings: (context) => const AdvancedSettingsScreen(),
   };
 }

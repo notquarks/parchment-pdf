@@ -55,6 +55,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         settingsService: widget.settingsService,
         themeNotifier: widget.themeNotifier,
         child: MaterialApp(
+          title: 'Parchment PDF',
           themeMode: widget.themeNotifier.value,
           theme: ThemeData(
             brightness: Brightness.light,

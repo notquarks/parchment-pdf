@@ -34,16 +34,14 @@ class MergeOperations {
     onTaskCreated?.call(task);
     try {
       await task;
+      await pdfOutput.commit();
       sw.stop();
-      debugPrint('PDF merge: ${sw.elapsedMilliseconds}ms | ${selectedFiles.length} files, ${(totalSize / 1024 / 1024).toStringAsFixed(1)}MB total');
-    } on PdfCancelled {
-      await output.close();
-      if (await saveFile.exists()) {
-        await saveFile.delete();
-      }
+      debugPrint(
+        'PDF merge: ${sw.elapsedMilliseconds}ms | ${selectedFiles.length} files, ${(totalSize / 1024 / 1024).toStringAsFixed(1)}MB total',
+      );
+    } catch (_) {
+      await pdfOutput.discard();
       rethrow;
-    } finally {
-      await output.close();
     }
     return saveFile.path;
   }

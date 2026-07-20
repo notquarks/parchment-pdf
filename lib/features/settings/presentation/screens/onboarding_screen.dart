@@ -27,7 +27,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   bool _darkMode = false;
   String _savePath = '';
+  String _initialSavePath = '';
   bool _permissionGranted = false;
+  bool _defaultsLoaded = false;
 
   static const _totalPages = 3;
 
@@ -40,19 +42,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _initDefaults() async {
     _darkMode = await widget.settingsService.getDarkMode();
     _savePath = await widget.settingsService.getSavePath();
+    _initialSavePath = _savePath;
     if (Platform.isAndroid) {
       _permissionGranted = await StorageHelper.isStoragePermissionGranted();
+    } else {
+      _permissionGranted = true;
     }
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {
+      _defaultsLoaded = true;
+    });
   }
 
   void _nextPage() {
-    if (_currentPage < _totalPages - 1) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
+    if (_currentPage >= _totalPages - 1) return;
+    if (_currentPage == 1 &&
+        Platform.isAndroid &&
+        !_permissionGranted) {
+      return;
     }
+    _pageController.nextPage(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
   }
 
   void _previousPage() {
@@ -65,12 +77,45 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _finish() async {
-    await widget.settingsService.setDarkMode(_darkMode);
+    if (!_canFinish) return;
+    if (!_defaultsLoaded) {
+      return;
+    }
+    if (_darkMode != await widget.settingsService.getDarkMode()) {
+      await widget.settingsService.setDarkMode(_darkMode);
+    }
     widget.themeNotifier.toggleDark(_darkMode);
-    await widget.settingsService.setSavePath(_savePath);
+    if (_savePath.isNotEmpty && _savePath != _initialSavePath) {
+      await widget.settingsService.setSavePath(_savePath);
+    }
     await widget.settingsService.setOnboardingComplete(true);
     if (!mounted) return;
-    widget.onComplete?.call();
+    if (widget.onComplete != null) {
+      widget.onComplete!();
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
+  bool get _canFinish {
+    if (_currentPage == _totalPages - 1) {
+      return _savePath.isNotEmpty;
+    }
+    if (_currentPage == 1 && Platform.isAndroid) {
+      return _permissionGranted;
+    }
+    return true;
+  }
+
+  bool get _canSkip =>
+      !(_currentPage == 1 && Platform.isAndroid);
+
+  bool get _canAdvance {
+    if (_currentPage >= _totalPages - 1) return false;
+    if (_currentPage == 1 && Platform.isAndroid && !_permissionGranted) {
+      return false;
+    }
+    return true;
   }
 
   Future<void> _pickFolder() async {
@@ -161,15 +206,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     const SizedBox.shrink(),
                   const Spacer(),
                   if (_currentPage < _totalPages - 1) ...[
-                    TextButton(onPressed: _finish, child: const Text('Skip')),
-                    const SizedBox(width: 8),
+                    if (_canSkip)
+                      TextButton(
+                        onPressed: _finish,
+                        child: const Text('Skip'),
+                      ),
+                    if (_canSkip) const SizedBox(width: 8),
                     FilledButton(
-                      onPressed: _nextPage,
+                      onPressed: _canAdvance ? _nextPage : null,
                       child: const Text('Next'),
                     ),
                   ] else
                     FilledButton(
-                      onPressed: _finish,
+                      onPressed: _canFinish ? _finish : null,
                       child: const Text('Get Started'),
                     ),
                 ],

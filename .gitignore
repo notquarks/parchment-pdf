@@ -42,7 +42,7 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Packages - local packages should be tracked, but their build artifacts should not
+# Packages
 packages/**/build/
 packages/**/.dart_tool/
 packages/**/.packages
@@ -55,8 +55,6 @@ packages/**/example/
 packages/**/.github/
 packages/**/.githooks/
 packages/**/docs/
-packages/pdf_manipulator
-packages/qpdf_optimizer
 
 # Platform-specific build outputs
 /android/.gradle/
@@ -90,3 +88,4 @@ coverage/lcov.info
 
 # FVM Version Cache
 .fvm/
+.tokensave

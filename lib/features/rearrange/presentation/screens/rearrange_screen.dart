@@ -284,6 +284,7 @@ class _RearrangeScreenState extends State<RearrangeScreen> {
     return RearrangePageCard.buildDragFeedback(
       context,
       index,
+      _state.pageOrder[index],
       _state.documentRef!,
       _state.pageOrder.length,
     );

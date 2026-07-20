@@ -104,7 +104,8 @@ class _MergeScreenState extends State<MergeScreen> {
     final pdf = Pdf();
     PdfTask<void>? mergeTask;
 
-    final mergeFuture = MergeOperations.performMerge(
+    late final Future<String> mergeFuture;
+    mergeFuture = MergeOperations.performMerge(
       context: context,
       selectedFiles: _selectedFiles,
       pdf: pdf,
@@ -125,6 +126,9 @@ class _MergeScreenState extends State<MergeScreen> {
             } else {
               await pdf.dispose();
             }
+            try {
+              await mergeFuture;
+            } catch (_) {}
           },
         ),
       ),

@@ -34,18 +34,25 @@ class SplitOperations {
     final output = pdfOutput.sink;
     final source = FileSource(filePicked);
 
+    PdfTask<void>? splitTask;
     try {
-      final mergeFuture = pdf
-          .extractPages(
+      final mergeFuture = () async {
+        try {
+          splitTask = pdf.extractPages(
             source,
             output,
             pages: selectedPages.map((p) => p - 1).toList(),
-          )
-          .then((_) => saveFile.path)
-          .whenComplete(() async {
-            await output.close();
-            await pdf.dispose();
-          });
+          );
+          await splitTask;
+          await pdfOutput.commit();
+          return saveFile.path;
+        } catch (_) {
+          await pdfOutput.discard();
+          rethrow;
+        } finally {
+          await pdf.dispose();
+        }
+      }();
 
       if (!context.mounted) return;
 
@@ -56,11 +63,17 @@ class SplitOperations {
             messages: TaskMessages.split,
             fileCount: selectedPages.length,
             mergeFuture: mergeFuture,
+            onCancel: () async {
+              splitTask?.cancel();
+              try {
+                await mergeFuture;
+              } catch (_) {}
+            },
           ),
         ),
       );
     } catch (e) {
-      await output.close();
+      await pdfOutput.discard();
       await pdf.dispose();
       if (context.mounted) {
         showErrorSnackBar(context, 'Split failed: $e');

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -45,6 +46,7 @@ class _ResultScreenState extends State<ResultScreen> {
   bool _unchanged = false;
   String? _error;
   bool _cancelled = false;
+  bool _cancelling = false;
 
   bool get _hasMultipleFiles => _filePaths.length > 1;
 
@@ -95,19 +97,27 @@ class _ResultScreenState extends State<ResultScreen> {
       _completed = true;
     });
     if (paths.isNotEmpty) {
-      _saveToRecent(paths.first);
+      unawaited(_saveOutputsToRecent(paths));
     }
   }
 
-  void _saveToRecent(String path) {
+  Future<void> _saveOutputsToRecent(List<String> paths) async {
+    for (final path in paths) {
+      await _saveToRecent(path, inputFileCount: 1);
+    }
+  }
+
+  Future<void> _saveToRecent(String path, {int? inputFileCount}) {
     final service = RecentFilesProvider.of(context);
-    service.addRecentFile(RecentFile(
-      filePath: path,
-      fileName: path.split(Platform.pathSeparator).last,
-      operationType: widget.messages.title.toLowerCase(),
-      inputFileCount: widget.fileCount,
-      timestamp: DateTime.now().millisecondsSinceEpoch,
-    ));
+    return service.addRecentFile(
+      RecentFile(
+        filePath: path,
+        fileName: path.split(Platform.pathSeparator).last,
+        operationType: widget.messages.title.toLowerCase(),
+        inputFileCount: inputFileCount ?? widget.fileCount,
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
   }
 
   void _onError(Object e) {
@@ -295,10 +305,10 @@ class _ResultScreenState extends State<ResultScreen> {
   }
 
   Widget? _bottomBar() {
-    if (_completed || _error != null) {
+    if (_completed || _error != null || _cancelled) {
       return _resultActionsBar();
     }
-    if (_cancelled || widget.onCancel != null) {
+    if (widget.onCancel != null) {
       return _cancelBar();
     }
     return null;
@@ -358,11 +368,20 @@ class _ResultScreenState extends State<ResultScreen> {
                 backgroundColor: Theme.of(context).colorScheme.errorContainer,
               ),
               size: M3EButtonSize.md,
-              onPressed: () {
-                Navigator.pop(context);
-              },
+              onPressed: _cancelling
+                  ? null
+                  : () async {
+                      setState(() => _cancelling = true);
+                      try {
+                        await widget.onCancel?.call();
+                      } finally {
+                        if (mounted) {
+                          Navigator.pop(context);
+                        }
+                      }
+                    },
               child: Text(
-                'Cancel',
+                _cancelling ? 'Cancelling…' : 'Cancel',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onErrorContainer,
                 ),

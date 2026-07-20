@@ -1,9 +1,9 @@
-[submodule "packages/qpdf_optimizer/native/third_party/qpdf"]
-	path = packages/qpdf_optimizer/native/third_party/qpdf
-	url = https://github.com/qpdf/qpdf.git
-[submodule "packages/qpdf_optimizer/native/third_party/libjpeg-turbo"]
-	path = packages/qpdf_optimizer/native/third_party/libjpeg-turbo
-	url = https://github.com/libjpeg-turbo/libjpeg-turbo.git
 [submodule "packages/qpdf_optimizer/native/third_party/zlib"]
 	path = packages/qpdf_optimizer/native/third_party/zlib
 	url = https://github.com/madler/zlib.git
+[submodule "packages/qpdf_optimizer/native/third_party/libjpeg-turbo"]
+	path = packages/qpdf_optimizer/native/third_party/libjpeg-turbo
+	url = https://github.com/libjpeg-turbo/libjpeg-turbo.git
+[submodule "packages/qpdf_optimizer/native/third_party/qpdf"]
+	path = packages/qpdf_optimizer/native/third_party/qpdf
+	url = https://github.com/qpdf/qpdf.git

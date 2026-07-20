@@ -1,12 +1,14 @@
-import 'package:pdf_tools/features/settings/presentation/screens/onboarding_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:m3e_core/m3e_core.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:pdf_tools/core/utils/storage_helper.dart';
 import 'package:pdf_tools/features/home/presentation/widgets/m3_flex_space.dart';
-import 'package:pdf_tools/features/settings/presentation/widgets/settings_provider.dart';
 import 'package:pdf_tools/features/settings/data/services/settings_service.dart';
 import 'package:pdf_tools/features/settings/data/services/theme_notifier.dart';
-import 'package:pdf_tools/core/utils/storage_helper.dart';
+import 'package:pdf_tools/features/settings/presentation/screens/onboarding_screen.dart';
+import 'package:pdf_tools/features/settings/presentation/widgets/settings_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -61,7 +63,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _pickSavePath() async {
     final granted = await StorageHelper.ensureStoragePermission();
     if (!granted) {
-      if (mounted) _showSnack('Storage permission needed to save to custom folders.');
+      if (mounted)
+        _showSnack('Storage permission needed to save to custom folders.');
       return;
     }
 
@@ -90,12 +93,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
+          SliverAppBar.large(
+            title: const Text('Settings'),
+            centerTitle: false,
             expandedHeight: 150,
-            flexibleSpace: FlexibleSpaceM3(title: 'Settings'),
           ),
           SliverPadding(
-            padding: const EdgeInsetsDirectional.only(start: 12, end: 12),
+            padding: const EdgeInsetsDirectional.only(start: 12, end: 12, bottom: 96),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 Padding(
@@ -113,7 +117,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 M3ECardColumn(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 2,
-                    vertical: 4,
                   ),
                   margin: EdgeInsets.zero,
                   children: [
@@ -166,6 +169,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       trailing: const Icon(Icons.chevron_right),
                       onTap: _pickSavePath,
                     ),
+                    ListTile(
+                      leading: const Icon(Symbols.chrome_reader_mode_rounded),
+                      title: Text(
+                        'Viewer Settings',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      onTap: () { Navigator.pushNamed(context, '/viewer_settings'); },
+                    ),
+                    ListTile(
+                      leading: const Icon(Symbols.code),
+                      title: Text(
+                        'Advanced Settings',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      onTap: () {
+                        Navigator.pushNamed(context, '/advanced_settings');
+                      },
+                    ),
                   ],
                 ),
                 Padding(
@@ -183,32 +204,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 M3ECardColumn(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 2,
-                    vertical: 4,
                   ),
                   margin: EdgeInsets.zero,
                   children: [
-                    ListTile(
-                      leading: const Icon(Icons.rocket_launch),
-                      title: Text(
-                        'Setup Wizard',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      subtitle: Text(
-                        'Re-run the initial setup',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
-                      ),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => OnboardingScreen(
-                            settingsService: _settingsService,
-                            themeNotifier: _themeNotifier,
-                          ),
-                        ),
-                      ),
-                    ),
+                    
                     ListTile(
                       leading: const Icon(Icons.info),
                       title: Text(
@@ -236,7 +235,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         'Repository',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      onTap: () {},
+                      onTap: () async {
+                        launchUrl(
+                          Uri.parse(
+                            'https://github.com/notquarks/parchment-pdf',
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),

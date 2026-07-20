@@ -61,18 +61,25 @@ class RearrangeOperations {
     final output = pdfOutput.sink;
     final source = FileSource(state.filePicked!);
 
+    PdfTask<void>? rearrangeTask;
     try {
-      final mergeFuture = pdf
-          .extractPages(
+      final mergeFuture = () async {
+        try {
+          rearrangeTask = pdf.extractPages(
             source,
             output,
             pages: state.pageOrder.map((page) => page - 1).toList(),
-          )
-          .then((_) => saveFile.path)
-          .whenComplete(() async {
-            await output.close();
-            await pdf.dispose();
-          });
+          );
+          await rearrangeTask;
+          await pdfOutput.commit();
+          return saveFile.path;
+        } catch (_) {
+          await pdfOutput.discard();
+          rethrow;
+        } finally {
+          await pdf.dispose();
+        }
+      }();
 
       if (!context.mounted) return;
 
@@ -83,11 +90,17 @@ class RearrangeOperations {
             messages: TaskMessages.rearrange,
             fileCount: state.pageOrder.length,
             mergeFuture: mergeFuture,
+            onCancel: () async {
+              rearrangeTask?.cancel();
+              try {
+                await mergeFuture;
+              } catch (_) {}
+            },
           ),
         ),
       );
     } catch (error) {
-      await output.close();
+      await pdfOutput.discard();
       await pdf.dispose();
       if (context.mounted) {
         showErrorSnackBar(context, 'Rearrange failed: $error');
@@ -100,8 +113,9 @@ class RearrangeOperations {
     required RearrangeState state,
   }) async {
     if (!state.hasSelection) return;
-    final controller =
-        TextEditingController(text: '${state.selectedPageIndex + 1}');
+    final controller = TextEditingController(
+      text: '${state.selectedPageIndex + 1}',
+    );
     final target = await showDialog<int>(
       context: context,
       builder: (context) => AlertDialog(
@@ -156,8 +170,7 @@ class RearrangeOperations {
     required Offset position,
   }) async {
     state.selectPage(index);
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final command = await showMenu<String>(
       context: context,
       position: RelativeRect.fromRect(
@@ -172,10 +185,7 @@ class RearrangeOperations {
     if (command != null) {
       final pageCommand = PageCommand.values.byName(command);
       state.selectPage(index);
-      _executeCommand(
-        state: state,
-        command: pageCommand,
-      );
+      _executeCommand(state: state, command: pageCommand);
     }
   }
 
@@ -185,10 +195,7 @@ class RearrangeOperations {
     required int index,
   }) {
     state.selectPage(index);
-    _executeCommand(
-      state: state,
-      command: command,
-    );
+    _executeCommand(state: state, command: command);
   }
 
   static void _executeCommand({

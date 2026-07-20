@@ -31,6 +31,7 @@ void main() {
         bytes.setAll(0, input);
         await File(outputPath).writeAsBytes(bytes);
       }),
+      pageCount: _onePageCount,
     );
 
     final result = await service.compressPdf(
@@ -59,6 +60,7 @@ void main() {
       optimizer: _TestPdfOptimizer((inputPath, outputPath) async {
         await _writePdf(File(outputPath), 'Small PDF');
       }),
+      pageCount: _onePageCount,
     );
 
     final result = await service.compressPdf(
@@ -82,6 +84,7 @@ void main() {
 
     final service = CompressionService(
       optimizer: _UnavailablePdfOptimizer(),
+      pageCount: _onePageCount,
     );
 
     await expectLater(
@@ -109,6 +112,7 @@ void main() {
       optimizer: _TestPdfOptimizer((inputPath, outputPath) async {
         wasCalled = true;
       }),
+      pageCount: _onePageCount,
     );
 
     await expectLater(
@@ -127,6 +131,7 @@ void main() {
   });
 }
 
+Future<int> _onePageCount(String path) async => 1;
 class _TestPdfOptimizer implements PdfOptimizer {
   final Future<void> Function(String inputPath, String outputPath) _writeFile;
 

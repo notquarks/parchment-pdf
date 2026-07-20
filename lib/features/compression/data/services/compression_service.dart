@@ -13,12 +13,17 @@ import 'pdf_optimizer.dart';
 class CompressionService {
   final CompressionWorker _worker;
   final PdfOptimizer _optimizer;
+  final Future<int> Function(String path) _pageCount;
   bool _isDisposed = false;
   bool _workerInitialized = false;
 
-  CompressionService({int? maxWorkers, PdfOptimizer? optimizer})
-    : _worker = CompressionWorker(maxWorkers: maxWorkers),
-      _optimizer = optimizer ?? createPdfOptimizer();
+  CompressionService({
+    int? maxWorkers,
+    PdfOptimizer? optimizer,
+    Future<int> Function(String path)? pageCount,
+  }) : _worker = CompressionWorker(maxWorkers: maxWorkers),
+       _optimizer = optimizer ?? createPdfOptimizer(),
+       _pageCount = pageCount ?? _openPdfPageCount;
 
   Future<void> initialize() async {
     _ensureNotDisposed();
@@ -117,9 +122,8 @@ class CompressionService {
 
     try {
       await _deleteFileIfExists(temporaryFile);
-      final totalPages = await _pageCount(filePath);
-
       _throwIfCancelled(cancelToken);
+      final totalPages = await _pageCount(filePath);
 
       if (options.mode != PdfCompressionMode.structural) {
         throw const PdfOptimizerException(
@@ -184,7 +188,7 @@ class CompressionService {
     }
   }
 
-  Future<int> _pageCount(String path) async {
+  static Future<int> _openPdfPageCount(String path) async {
     final document = await pdfrx.PdfDocument.openFile(path);
     try {
       return document.pages.length;
@@ -197,15 +201,10 @@ class CompressionService {
     required String path,
     required int expectedPageCount,
   }) async {
-    final outputDocument = await pdfrx.PdfDocument.openFile(path);
-    try {
-      if (outputDocument.pages.length != expectedPageCount) {
-        throw const PdfOptimizerException(
-          'Output PDF page count does not match the input',
-        );
-      }
-    } finally {
-      await outputDocument.dispose();
+    if (await _pageCount(path) != expectedPageCount) {
+      throw const PdfOptimizerException(
+        'Output PDF page count does not match the input',
+      );
     }
   }
 
@@ -262,7 +261,9 @@ class CompressionService {
       if (await file.exists()) {
         await file.delete();
       }
-    } on FileSystemException {}
+    } on FileSystemException {
+      return;
+    }
   }
 
   Future<CompressionResult> compressImages({
