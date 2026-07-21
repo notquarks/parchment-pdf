@@ -35,13 +35,23 @@ set(COMMON_ARGS
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON
 )
 
+# Link-Time Optimization (LTO): embed bitcode in static libraries so the
+# final shared library linker can perform cross-module inlining and dead
+# code elimination. This reduces libqpdf_optimizer.so size by ~10-20%.
+set(QPDF_OPTIMIZER_LTO_FLAGS "-flto")
+
 # When building for Android, force PIC on all static libs so they can be
 # linked into a shared library (.so). qpdf overrides POSITION_INDEPENDENT_CODE
 # based on BUILD_STATIC_LIBS, so we must inject -fPIC via flags.
 if(ANDROID)
   list(APPEND COMMON_ARGS
-    -DCMAKE_C_FLAGS=-fPIC
-    -DCMAKE_CXX_FLAGS=-fPIC
+    "-DCMAKE_C_FLAGS=-fPIC ${QPDF_OPTIMIZER_LTO_FLAGS}"
+    "-DCMAKE_CXX_FLAGS=-fPIC ${QPDF_OPTIMIZER_LTO_FLAGS}"
+  )
+else()
+  list(APPEND COMMON_ARGS
+    -DCMAKE_C_FLAGS=${QPDF_OPTIMIZER_LTO_FLAGS}
+    -DCMAKE_CXX_FLAGS=${QPDF_OPTIMIZER_LTO_FLAGS}
   )
 endif()
 
@@ -164,6 +174,9 @@ target_include_directories(
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${DEPS_DIR}/include"
 )
+# LTO linker flags: the linker must also see -flto to optimize across
+# the static library boundaries.
+target_link_options(qpdf_optimizer PRIVATE ${QPDF_OPTIMIZER_LTO_FLAGS})
 target_link_libraries(qpdf_optimizer PRIVATE qpdf_static "${JPEG_LIBRARY}" "${ZLIB_LIBRARY}")
 
 if(WIN32)

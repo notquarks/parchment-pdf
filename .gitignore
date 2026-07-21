@@ -37,6 +37,9 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
+# Crash symbolication files from --split-debug-info
+build/debug-info/
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile

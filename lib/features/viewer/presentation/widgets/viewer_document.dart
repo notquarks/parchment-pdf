@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
+import 'package:pdf_tools/features/viewer/data/models/viewer_settings.dart';
 
 import 'color_matrix_utils.dart';
 import 'viewer_page_layout.dart';
-import 'viewer_tools_sheet.dart';
 
 class ViewerDocument extends StatelessWidget {
   const ViewerDocument({

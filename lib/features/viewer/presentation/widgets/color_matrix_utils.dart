@@ -1,6 +1,6 @@
 import 'dart:ui' as ui;
 
-enum ViewerContentFilter { original, grayscale, sepia, invert }
+import 'package:pdf_tools/features/viewer/data/models/viewer_settings.dart';
 
 ui.ColorFilter? viewerColorFilter({
   required ViewerContentFilter filter,
@@ -14,22 +14,10 @@ ui.ColorFilter? viewerColorFilter({
 
   var matrix = _identityMatrix;
 
-  matrix = _multiplyMatrices(
-    _filterMatrix(filter),
-    matrix,
-  );
-  matrix = _multiplyMatrices(
-    _saturationMatrix(normalizedSaturation),
-    matrix,
-  );
-  matrix = _multiplyMatrices(
-    _contrastMatrix(normalizedContrast),
-    matrix,
-  );
-  matrix = _multiplyMatrices(
-    _brightnessMatrix(normalizedBrightness),
-    matrix,
-  );
+  matrix = _multiplyMatrices(_filterMatrix(filter), matrix);
+  matrix = _multiplyMatrices(_saturationMatrix(normalizedSaturation), matrix);
+  matrix = _multiplyMatrices(_contrastMatrix(normalizedContrast), matrix);
+  matrix = _multiplyMatrices(_brightnessMatrix(normalizedBrightness), matrix);
 
   if (_isIdentity(matrix)) return null;
   return ui.ColorFilter.matrix(matrix);
@@ -47,20 +35,52 @@ List<double> _filterMatrix(ViewerContentFilter filter) {
 List<double> _brightnessMatrix(double brightness) {
   final offset = brightness * 255;
   return [
-    1, 0, 0, 0, offset,
-    0, 1, 0, 0, offset,
-    0, 0, 1, 0, offset,
-    0, 0, 0, 1, 0,
+    1,
+    0,
+    0,
+    0,
+    offset,
+    0,
+    1,
+    0,
+    0,
+    offset,
+    0,
+    0,
+    1,
+    0,
+    offset,
+    0,
+    0,
+    0,
+    1,
+    0,
   ];
 }
 
 List<double> _contrastMatrix(double contrast) {
   final offset = 128 * (1 - contrast);
   return [
-    contrast, 0, 0, 0, offset,
-    0, contrast, 0, 0, offset,
-    0, 0, contrast, 0, offset,
-    0, 0, 0, 1, 0,
+    contrast,
+    0,
+    0,
+    0,
+    offset,
+    0,
+    contrast,
+    0,
+    0,
+    offset,
+    0,
+    0,
+    contrast,
+    0,
+    offset,
+    0,
+    0,
+    0,
+    1,
+    0,
   ];
 }
 
@@ -127,29 +147,93 @@ bool _isIdentity(List<double> matrix) {
 }
 
 const List<double> _identityMatrix = [
-  1, 0, 0, 0, 0,
-  0, 1, 0, 0, 0,
-  0, 0, 1, 0, 0,
-  0, 0, 0, 1, 0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
 ];
 
 const List<double> _grayscaleMatrix = [
-  0.2126, 0.7152, 0.0722, 0, 0,
-  0.2126, 0.7152, 0.0722, 0, 0,
-  0.2126, 0.7152, 0.0722, 0, 0,
-  0, 0, 0, 1, 0,
+  0.2126,
+  0.7152,
+  0.0722,
+  0,
+  0,
+  0.2126,
+  0.7152,
+  0.0722,
+  0,
+  0,
+  0.2126,
+  0.7152,
+  0.0722,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
 ];
 
 const List<double> _sepiaMatrix = [
-  0.393, 0.769, 0.189, 0, 0,
-  0.349, 0.686, 0.168, 0, 0,
-  0.272, 0.534, 0.131, 0, 0,
-  0, 0, 0, 1, 0,
+  0.393,
+  0.769,
+  0.189,
+  0,
+  0,
+  0.349,
+  0.686,
+  0.168,
+  0,
+  0,
+  0.272,
+  0.534,
+  0.131,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
 ];
 
 const List<double> _invertMatrix = [
-  -1, 0, 0, 0, 255,
-  0, -1, 0, 0, 255,
-  0, 0, -1, 0, 255,
-  0, 0, 0, 1, 0,
+  -1,
+  0,
+  0,
+  0,
+  255,
+  0,
+  -1,
+  0,
+  0,
+  255,
+  0,
+  0,
+  -1,
+  0,
+  255,
+  0,
+  0,
+  0,
+  1,
+  0,
 ];

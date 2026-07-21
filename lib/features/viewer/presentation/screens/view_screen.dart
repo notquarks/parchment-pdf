@@ -6,7 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdfrx/pdfrx.dart';
 
-import '../widgets/color_matrix_utils.dart';
+import 'package:pdf_tools/features/settings/data/services/settings_service.dart';
+import 'package:pdf_tools/features/viewer/data/models/viewer_settings.dart';
+import 'package:pdf_tools/features/settings/presentation/widgets/settings_provider.dart';
+
 import '../widgets/viewer_chrome.dart';
 import '../widgets/viewer_dialogs.dart';
 import '../widgets/viewer_document.dart';
@@ -14,7 +17,6 @@ import '../widgets/viewer_navigation_panel.dart';
 import '../widgets/viewer_overlays.dart';
 import '../widgets/viewer_presenters.dart';
 import '../widgets/viewer_scaffold.dart';
-import '../widgets/viewer_tools_sheet.dart';
 
 part '../logic/viewer_ui_state.dart';
 
@@ -61,6 +63,9 @@ class _ViewScreenState extends State<ViewScreen> with _ViewerUiState {
   bool _showPageIndicator = true;
 
   ViewerNavigationTab _navigationTab = ViewerNavigationTab.thumbnails;
+  bool _settingsLoaded = false;
+
+  SettingsService get _settings => SettingsProvider.of(context).settingsService;
 
   String get _fileName => p.basename(widget.documentRef.key.sourceName);
 
@@ -112,6 +117,36 @@ class _ViewScreenState extends State<ViewScreen> with _ViewerUiState {
       BackgroundTheme.dark => Colors.black,
       BackgroundTheme.sepia => _sepiaBackground,
     };
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_settingsLoaded) return;
+    _settingsLoaded = true;
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final s = _settings;
+    final results = await Future.wait([
+      s.getReadingDirection(),
+      s.getBackgroundTheme(),
+      s.getScaleType(),
+      s.getTapZoneMode(),
+      s.getViewerContentFilter(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _readingDirection = results[0] as ReadingDirection;
+      _backgroundTheme = results[1] as BackgroundTheme;
+      _scaleType = results[2] as ScaleType;
+      _tapZoneMode = results[3] as TapZoneMode;
+      _contentFilter = results[4] as ViewerContentFilter;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _applyScaleType();
+    });
   }
 
   @override
@@ -199,16 +234,20 @@ class _ViewScreenState extends State<ViewScreen> with _ViewerUiState {
       onReadingDirectionChanged: _changeReadingDirection,
       onBackgroundThemeChanged: (value) {
         setState(() => _backgroundTheme = value);
+        _settings.setBackgroundTheme(value);
       },
       onScaleTypeChanged: (value) {
         setState(() => _scaleType = value);
         _applyScaleType();
+        _settings.setScaleType(value);
       },
       onContentFilterChanged: (value) {
         setState(() => _contentFilter = value);
+        _settings.setViewerContentFilter(value);
       },
       onTapZoneModeChanged: (value) {
         setState(() => _tapZoneMode = value);
+        _settings.setTapZoneMode(value);
       },
       onBrightnessChanged: (value) {
         setState(() => _brightness = value);
@@ -238,6 +277,8 @@ class _ViewScreenState extends State<ViewScreen> with _ViewerUiState {
           _contrast = _defaultContrast;
           _saturation = _defaultSaturation;
         });
+        _settings.setBackgroundTheme(BackgroundTheme.dark);
+        _settings.setViewerContentFilter(ViewerContentFilter.original);
       },
     );
     _startHideTimer();
@@ -246,6 +287,7 @@ class _ViewScreenState extends State<ViewScreen> with _ViewerUiState {
   void _changeReadingDirection(ReadingDirection direction) {
     final currentPage = _pageNumber;
     setState(() => _readingDirection = direction);
+    _settings.setReadingDirection(direction);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!_controller.isReady) return;
       _controller.invalidate();

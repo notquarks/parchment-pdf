@@ -51,7 +51,6 @@ class _ViewerBottomBarState extends State<ViewerBottomBar> {
       .toDouble();
   int get _displayPage => widget.pageCount == 0 ? 0 : _sliderValue.round();
 
-
   @override
   Widget build(BuildContext context) {
     final padding = widget.compact ? _compactPadding : _regularPadding;
