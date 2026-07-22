@@ -14,8 +14,8 @@ class AppRoutes {
   static const String split = '/split';
   static const String rearrange = '/rearrange';
   static const String settings = '/settings';
-  static const String viewer_settings = '/viewer_settings';
-  static const String advanced_settings = '/advanced_settings';
+  static const String viewerSettings = '/viewer_settings';
+  static const String advancedSettings = '/advanced_settings';
 
   static Map<String, WidgetBuilder> get routes => {
     compress: (context) => const CompressScreen(),
@@ -23,7 +23,7 @@ class AppRoutes {
     split: (context) => const SplitScreen(),
     rearrange: (context) => const RearrangeScreen(),
     settings: (context) => const SettingsScreen(),
-    viewer_settings: (context) => const ViewerSettingsScreen(),
-    advanced_settings: (context) => const AdvancedSettingsScreen(),
+    viewerSettings: (context) => const ViewerSettingsScreen(),
+    advancedSettings: (context) => const AdvancedSettingsScreen(),
   };
 }

@@ -51,12 +51,20 @@ class _RearrangeScreenState extends State<RearrangeScreen> {
     );
   }
 
-  Future<bool> _onWillPop() => _confirmDiscardChanges();
+  void _onPopInvokedWithResult(bool didPop, dynamic result) {
+    if (didPop) return;
+    _confirmDiscardChanges().then((confirmed) {
+      if (confirmed && mounted) {
+        Navigator.of(context).pop();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _onWillPop,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: _onPopInvokedWithResult,
       child: CallbackShortcuts(
         bindings: {
           const SingleActivator(LogicalKeyboardKey.keyZ, control: true): _state.undo,
@@ -243,10 +251,10 @@ class _RearrangeScreenState extends State<RearrangeScreen> {
     required bool compact,
   }) {
     return DragTarget<int>(
-      onWillAccept: (sourceIndex) =>
-          sourceIndex != null && sourceIndex != index,
-      onAccept: (sourceIndex) {
-        _state.movePage(sourceIndex, index);
+      onWillAcceptWithDetails: (details) =>
+          details.data != index,
+      onAcceptWithDetails: (details) {
+        _state.movePage(details.data, index);
         _announceMove();
       },
       builder: (context, candidateData, rejectedData) {

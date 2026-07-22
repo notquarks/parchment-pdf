@@ -13,12 +13,6 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedPage = 0;
-  final List<Widget> _pages = const [
-    HomeScreen(title: 'Parchment'),
-    FilesScreen(),
-    ToolsScreen(),
-    SettingsScreen(),
-  ];
 
   void _navigateToFiles() {
     setState(() => _selectedPage = 1);

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:m3e_core/m3e_core.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:pdf_tools/features/home/presentation/providers/recent_files_provider.dart';
 import 'package:pdf_tools/features/settings/data/services/settings_service.dart';

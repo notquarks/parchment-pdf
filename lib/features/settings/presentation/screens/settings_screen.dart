@@ -3,10 +3,8 @@ import 'package:m3e_core/m3e_core.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:pdf_tools/core/utils/storage_helper.dart';
-import 'package:pdf_tools/features/home/presentation/widgets/m3_flex_space.dart';
 import 'package:pdf_tools/features/settings/data/services/settings_service.dart';
 import 'package:pdf_tools/features/settings/data/services/theme_notifier.dart';
-import 'package:pdf_tools/features/settings/presentation/screens/onboarding_screen.dart';
 import 'package:pdf_tools/features/settings/presentation/widgets/settings_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -63,8 +61,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _pickSavePath() async {
     final granted = await StorageHelper.ensureStoragePermission();
     if (!granted) {
-      if (mounted)
+      if (mounted) {
         _showSnack('Storage permission needed to save to custom folders.');
+      }
       return;
     }
 

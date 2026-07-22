@@ -90,7 +90,7 @@ void main(List<String> arguments) async {
       // Try NDK-bundled ninja first
       if (ndkClang != null) {
         final ndkNinja = p.join(
-          p.dirname(ndkClang!),
+          p.dirname(ndkClang),
           'ninja${Platform.isWindows ? '.exe' : ''}',
         );
         if (File(ndkNinja).existsSync()) {
