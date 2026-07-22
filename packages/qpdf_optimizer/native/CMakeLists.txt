@@ -166,12 +166,21 @@ ExternalProject_Add(
 add_library(qpdf_static STATIC IMPORTED GLOBAL)
 set_target_properties(qpdf_static PROPERTIES IMPORTED_LOCATION "${QPDF_LIBRARY}")
 
-add_library(qpdf_optimizer SHARED qpdf_bridge.cpp)
+add_library(qpdf_optimizer SHARED
+  qpdf_bridge.cpp
+  src/content_interpreter.cpp
+  src/pdf_analyzer.cpp
+  src/image_decoder.cpp
+  src/image_resampler.cpp
+  src/jpeg_encoder.cpp
+  src/pdf_image_rewriter.cpp
+)
 add_dependencies(qpdf_optimizer qpdf_project)
 target_include_directories(
   qpdf_optimizer
   PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${DEPS_DIR}/include"
 )
 # LTO linker flags: the linker must also see -flto to optimize across

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:pdf_manipulator/pdf_manipulator.dart';
 import 'package:pdfrx/pdfrx.dart' as pdfrx;
+import 'package:qpdf_optimizer/qpdf_optimizer.dart' as qpdf;
 
 import '../models/compression_options.dart';
 import 'compression_worker.dart';
@@ -29,12 +30,32 @@ class CompressionService {
     _ensureNotDisposed();
   }
 
+  /// Analyze a PDF using both the native qpdf analyzer (for structural
+  /// metadata and DPI info) and the Dart extractor (for image byte sizes).
+  ///
+  /// When [filePath] is provided, the native analyzer is used for accurate
+  /// DPI and placement data.  Otherwise only the Dart extractor runs.
   Future<CompressionAnalysis> analyzePdf({
     required DataSource source,
     required CompressionOptions options,
+    String? filePath,
   }) async {
     _ensureNotDisposed();
 
+    /* Try native analysis first for accurate DPI and placement data. */
+    qpdf.QpdfAnalysisResult? nativeResult;
+    if (filePath != null) {
+      try {
+        nativeResult = await qpdf.QpdfOptimizer().analyzePdf(
+          filePath,
+          dpiThreshold: options.dpiThreshold,
+        );
+      } catch (_) {
+        /* Fall through to Dart-only analysis */
+      }
+    }
+
+    /* Dart-side analysis via pdf_manipulator for image byte extraction. */
     final pdf = Pdf();
     try {
       final doc = await pdf.open(source);
@@ -77,12 +98,14 @@ class CompressionService {
         }
 
         return CompressionAnalysis(
-          totalPages: pageCount,
-          totalImages: images.length,
-          imagesToProcess: images.where((i) => i.shouldProcess(options)).length,
+          totalPages: nativeResult?.pageCount ?? pageCount,
+          totalImages: nativeResult?.imageCount ?? images.length,
+          imagesToProcess: nativeResult?.processableCount ??
+              images.where((i) => i.shouldProcess(options)).length,
           totalOriginalSize: totalOriginalSize,
           estimatedCompressedSize: estimatedCompressedSize,
           images: images,
+          nativeAnalysis: nativeResult,
         );
       } finally {
         await doc.dispose();
@@ -125,10 +148,25 @@ class CompressionService {
       _throwIfCancelled(cancelToken);
       final totalPages = await _pageCount(filePath);
 
-      if (options.mode != PdfCompressionMode.structural) {
-        throw const PdfOptimizerException(
-          'This compression mode is not available yet',
-        );
+      /* Route by compression mode.
+         Phase 2+ will implement the native image-analyzer + rewriter
+         for imageOptimized mode.  For now we accept it and fall through
+         to the structural pass — the v2 native layer handles the flag
+         but cannot yet resample images.  extremeRaster is stubbed
+         behind a clear error until Phase 5. */
+      switch (options.mode) {
+        case PdfCompressionMode.structural:
+        case PdfCompressionMode.imageOptimized:
+          /* Both go through the native qpdf optimizer.  The v2 C API
+             receives the mode flag so it can skip optimizeImages() in
+             image-optimized mode (future native image rewriter will
+             handle images before the structural pass). */
+          break;
+        case PdfCompressionMode.extremeRaster:
+          throw const PdfOptimizerException(
+            'Extreme raster mode is not yet implemented. '
+            'Use structural or imageOptimized mode.',
+          );
       }
 
       final result = await _optimizer.optimize(
@@ -401,6 +439,7 @@ class CompressionAnalysis {
   final int totalOriginalSize;
   final int estimatedCompressedSize;
   final List<ImageMetadata> images;
+  final qpdf.QpdfAnalysisResult? nativeAnalysis;
 
   const CompressionAnalysis({
     required this.totalPages,
@@ -409,6 +448,7 @@ class CompressionAnalysis {
     required this.totalOriginalSize,
     required this.estimatedCompressedSize,
     required this.images,
+    this.nativeAnalysis,
   });
 
   double get estimatedReductionPercent => totalOriginalSize > 0
