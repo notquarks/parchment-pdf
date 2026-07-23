@@ -40,4 +40,10 @@ const toolDefinitions = [
     icon: Symbols.low_priority,
     route: '/rearrange',
   ),
+  ToolDefinition(
+    title: 'Trim',
+    subtitle: 'Remove unwanted pages of a pdf.',
+    icon: Symbols.scan_delete,
+    route: '/trim',
+  ),
 ];

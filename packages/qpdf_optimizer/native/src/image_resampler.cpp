@@ -106,7 +106,7 @@ ResampledImage ImageResampler::resampleAreaBox(
     std::vector<double> accumulator(
         static_cast<size_t>(dst_w) * src.channels, 0.0);
 
-    auto processRow = [&](int32_t dy, int32_t sy) {
+    auto processRow = [&](int32_t sy) {
         for (int32_t dx = 0; dx < dst_w; ++dx) {
             auto& span = col_spans[dx];
             const uint8_t* src_row = src.scanline(sy);
@@ -131,7 +131,7 @@ ResampledImage ImageResampler::resampleAreaBox(
         std::fill(accumulator.begin(), accumulator.end(), 0.0);
 
         for (int32_t sy = sy0; sy < sy1; ++sy) {
-            processRow(dy, sy);
+            processRow(sy);
         }
 
         uint8_t* dst_row = dst.pixels.data() +

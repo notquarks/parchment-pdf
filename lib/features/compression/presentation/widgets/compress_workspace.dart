@@ -4,6 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:pdf_tools/core/utils/pdf_utils.dart';
 import 'package:pdf_tools/core/utils/string_utils.dart';
 import 'package:pdf_tools/features/compression/presentation/widgets/compress_controls.dart';
+import 'package:pdf_tools/features/compression/data/models/compression_options.dart';
 import 'package:pdf_tools/features/compression/presentation/widgets/compress_file_list.dart';
 import 'package:pdf_tools/features/compression/presentation/widgets/compress_preview_card.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -14,10 +15,20 @@ class CompressWorkspace extends StatefulWidget {
     required this.documentRef,
     required this.files,
     required this.selectedIndex,
-    required this.quality,
+    required this.selectedPreset,
+    required this.advancedQuality,
+    required this.advancedDpiTarget,
+    required this.advancedGrayscale,
+    required this.advancedStripMetadata,
     required this.savePath,
     required this.totalInputSize,
-    required this.onQualityChanged,
+    required this.estimate,
+    required this.isEstimating,
+    required this.onPresetChanged,
+    required this.onAdvancedQualityChanged,
+    required this.onAdvancedDpiTargetChanged,
+    required this.onAdvancedGrayscaleChanged,
+    required this.onAdvancedStripMetadataChanged,
     required this.onAddFiles,
     required this.onCompress,
     required this.onFileSelected,
@@ -29,7 +40,7 @@ class CompressWorkspace extends StatefulWidget {
   static const double _compactBreakpoint = 600;
   static const double _expandedBreakpoint = 960;
   static const double _maximumContentWidth = 1600;
-  static const double _compactBottomInset = 104;
+  static const double _compactBottomInset = 32;
   static const double _pagePadding = 16;
   static const double _sectionSpacing = 16;
   static const double _mediumSettingsWidth = 360;
@@ -39,10 +50,20 @@ class CompressWorkspace extends StatefulWidget {
   final PdfDocumentRef documentRef;
   final List<PickedPdfInfo> files;
   final int selectedIndex;
-  final int quality;
+  final CompressionPreset selectedPreset;
+  final int advancedQuality;
+  final int advancedDpiTarget;
+  final bool advancedGrayscale;
+  final bool advancedStripMetadata;
   final String savePath;
   final int totalInputSize;
-  final ValueChanged<int> onQualityChanged;
+  final CompressionEstimate? estimate;
+  final bool isEstimating;
+  final ValueChanged<CompressionPreset> onPresetChanged;
+  final ValueChanged<int> onAdvancedQualityChanged;
+  final ValueChanged<int> onAdvancedDpiTargetChanged;
+  final ValueChanged<bool> onAdvancedGrayscaleChanged;
+  final ValueChanged<bool> onAdvancedStripMetadataChanged;
   final VoidCallback onAddFiles;
   final VoidCallback onCompress;
   final ValueChanged<int> onFileSelected;
@@ -106,6 +127,8 @@ class _CompressWorkspaceState extends State<CompressWorkspace> {
           files: widget.files,
           selectedIndex: widget.selectedIndex,
           totalInputSize: widget.totalInputSize,
+          estimate: widget.estimate,
+          isEstimating: widget.isEstimating,
           fileListAxis: Axis.horizontal,
           initiallyExpanded: _filesExpanded,
           onExpansionChanged: _handleFilesExpansionChanged,
@@ -119,12 +142,22 @@ class _CompressWorkspaceState extends State<CompressWorkspace> {
           key: ValueKey(selectedFile.file.path),
           documentRef: widget.documentRef,
           file: selectedFile,
+          estimate: widget.estimate,
+          isEstimating: widget.isEstimating,
           layout: CompressPreviewLayout.compact,
         ),
         const SizedBox(height: CompressWorkspace._sectionSpacing),
         CompressControls(
-          quality: widget.quality,
-          onQualityChanged: widget.onQualityChanged,
+          selectedPreset: widget.selectedPreset,
+          onPresetChanged: widget.onPresetChanged,
+          advancedQuality: widget.advancedQuality,
+          onAdvancedQualityChanged: widget.onAdvancedQualityChanged,
+          advancedDpiTarget: widget.advancedDpiTarget,
+          onAdvancedDpiTargetChanged: widget.onAdvancedDpiTargetChanged,
+          advancedGrayscale: widget.advancedGrayscale,
+          onAdvancedGrayscaleChanged: widget.onAdvancedGrayscaleChanged,
+          advancedStripMetadata: widget.advancedStripMetadata,
+          onAdvancedStripMetadataChanged: widget.onAdvancedStripMetadataChanged,
         ),
       ],
     );
@@ -143,6 +176,8 @@ class _CompressWorkspaceState extends State<CompressWorkspace> {
                   files: widget.files,
                   selectedIndex: widget.selectedIndex,
                   totalInputSize: widget.totalInputSize,
+                  estimate: widget.estimate,
+                  isEstimating: widget.isEstimating,
                   fileListAxis: Axis.horizontal,
                   initiallyExpanded: _filesExpanded,
                   onExpansionChanged: _handleFilesExpansionChanged,
@@ -156,6 +191,8 @@ class _CompressWorkspaceState extends State<CompressWorkspace> {
                   key: ValueKey(selectedFile.file.path),
                   documentRef: widget.documentRef,
                   file: selectedFile,
+                  estimate: widget.estimate,
+                  isEstimating: widget.isEstimating,
                   layout: CompressPreviewLayout.medium,
                 ),
               ],
@@ -167,8 +204,17 @@ class _CompressWorkspaceState extends State<CompressWorkspace> {
             child: ListView(
               children: [
                 CompressControls(
-                  quality: widget.quality,
-                  onQualityChanged: widget.onQualityChanged,
+                  selectedPreset: widget.selectedPreset,
+                  onPresetChanged: widget.onPresetChanged,
+                  advancedQuality: widget.advancedQuality,
+                  onAdvancedQualityChanged: widget.onAdvancedQualityChanged,
+                  advancedDpiTarget: widget.advancedDpiTarget,
+                  onAdvancedDpiTargetChanged: widget.onAdvancedDpiTargetChanged,
+                  advancedGrayscale: widget.advancedGrayscale,
+                  onAdvancedGrayscaleChanged: widget.onAdvancedGrayscaleChanged,
+                  advancedStripMetadata: widget.advancedStripMetadata,
+                  onAdvancedStripMetadataChanged:
+                      widget.onAdvancedStripMetadataChanged,
                 ),
                 const SizedBox(height: CompressWorkspace._sectionSpacing),
                 _CompressActionCard(
@@ -196,6 +242,8 @@ class _CompressWorkspaceState extends State<CompressWorkspace> {
               files: widget.files,
               selectedIndex: widget.selectedIndex,
               totalInputSize: widget.totalInputSize,
+              estimate: widget.estimate,
+              isEstimating: widget.isEstimating,
               fileListAxis: Axis.vertical,
               fillsAvailableHeight: true,
               initiallyExpanded: _filesExpanded,
@@ -212,6 +260,8 @@ class _CompressWorkspaceState extends State<CompressWorkspace> {
               key: ValueKey(selectedFile.file.path),
               documentRef: widget.documentRef,
               file: selectedFile,
+              estimate: widget.estimate,
+              isEstimating: widget.isEstimating,
               layout: CompressPreviewLayout.expanded,
             ),
           ),
@@ -221,8 +271,17 @@ class _CompressWorkspaceState extends State<CompressWorkspace> {
             child: ListView(
               children: [
                 CompressControls(
-                  quality: widget.quality,
-                  onQualityChanged: widget.onQualityChanged,
+                  selectedPreset: widget.selectedPreset,
+                  onPresetChanged: widget.onPresetChanged,
+                  advancedQuality: widget.advancedQuality,
+                  onAdvancedQualityChanged: widget.onAdvancedQualityChanged,
+                  advancedDpiTarget: widget.advancedDpiTarget,
+                  onAdvancedDpiTargetChanged: widget.onAdvancedDpiTargetChanged,
+                  advancedGrayscale: widget.advancedGrayscale,
+                  onAdvancedGrayscaleChanged: widget.onAdvancedGrayscaleChanged,
+                  advancedStripMetadata: widget.advancedStripMetadata,
+                  onAdvancedStripMetadataChanged:
+                      widget.onAdvancedStripMetadataChanged,
                 ),
                 const SizedBox(height: CompressWorkspace._sectionSpacing),
                 _CompressActionCard(
@@ -246,6 +305,8 @@ class _BatchSummary extends StatelessWidget {
     required this.files,
     required this.selectedIndex,
     required this.totalInputSize,
+    required this.estimate,
+    required this.isEstimating,
     required this.fileListAxis,
     required this.initiallyExpanded,
     required this.onExpansionChanged,
@@ -261,6 +322,8 @@ class _BatchSummary extends StatelessWidget {
   final List<PickedPdfInfo> files;
   final int selectedIndex;
   final int totalInputSize;
+  final CompressionEstimate? estimate;
+  final bool isEstimating;
   final Axis fileListAxis;
   final bool initiallyExpanded;
   final void Function(int index, bool expanded) onExpansionChanged;
@@ -325,6 +388,8 @@ class _BatchSummary extends StatelessWidget {
             physics: fileListAxis == Axis.vertical
                 ? const NeverScrollableScrollPhysics()
                 : null,
+            selectedEstimate: estimate,
+            isEstimatingSelected: isEstimating,
             onSelected: onFileSelected,
             onRemoved: onFileRemoved,
           ),

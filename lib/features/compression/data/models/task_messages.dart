@@ -34,4 +34,10 @@ class TaskMessages {
     progress: 'Compressing…',
     success: 'Successfully Compressed!',
   );
+
+  static const trim = TaskMessages(
+    title: 'Trim',
+    progress: 'Trimming…',
+    success: 'Successfully Trimmed!',
+  );
 }

@@ -172,6 +172,7 @@ add_library(qpdf_optimizer SHARED
   src/pdf_analyzer.cpp
   src/image_decoder.cpp
   src/image_resampler.cpp
+  src/image_classifier.cpp
   src/jpeg_encoder.cpp
   src/pdf_image_rewriter.cpp
 )

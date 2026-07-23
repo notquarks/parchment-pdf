@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pdf_tools/core/utils/pdf_utils.dart';
+import 'package:pdf_tools/features/compression/data/models/compression_options.dart';
 import 'package:pdf_tools/features/compression/presentation/widgets/compress_controls.dart';
 import 'package:pdf_tools/features/compression/presentation/widgets/compress_file_info.dart';
 import 'package:pdf_tools/features/compression/presentation/widgets/compress_inline_actions.dart';
@@ -13,8 +14,16 @@ class CompressWideLayout extends StatelessWidget {
     required this.documentRef,
     required this.files,
     required this.selectedIndex,
-    required this.quality,
-    required this.onQualityChanged,
+    required this.selectedPreset,
+    required this.advancedQuality,
+    required this.advancedDpiTarget,
+    required this.advancedGrayscale,
+    required this.advancedStripMetadata,
+    required this.onPresetChanged,
+    required this.onAdvancedQualityChanged,
+    required this.onAdvancedDpiTargetChanged,
+    required this.onAdvancedGrayscaleChanged,
+    required this.onAdvancedStripMetadataChanged,
     required this.onAddFile,
     required this.onCompress,
     required this.onFileSelected,
@@ -23,8 +32,16 @@ class CompressWideLayout extends StatelessWidget {
   final PdfDocumentRef documentRef;
   final List<PickedPdfInfo> files;
   final int selectedIndex;
-  final int quality;
-  final ValueChanged<int> onQualityChanged;
+  final CompressionPreset selectedPreset;
+  final int advancedQuality;
+  final int advancedDpiTarget;
+  final bool advancedGrayscale;
+  final bool advancedStripMetadata;
+  final ValueChanged<CompressionPreset> onPresetChanged;
+  final ValueChanged<int> onAdvancedQualityChanged;
+  final ValueChanged<int> onAdvancedDpiTargetChanged;
+  final ValueChanged<bool> onAdvancedGrayscaleChanged;
+  final ValueChanged<bool> onAdvancedStripMetadataChanged;
   final VoidCallback onAddFile;
   final VoidCallback onCompress;
   final ValueChanged<int> onFileSelected;
@@ -70,8 +87,16 @@ class CompressWideLayout extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       CompressControls(
-                        quality: quality,
-                        onQualityChanged: onQualityChanged,
+                        selectedPreset: selectedPreset,
+                        onPresetChanged: onPresetChanged,
+                        advancedQuality: advancedQuality,
+                        onAdvancedQualityChanged: onAdvancedQualityChanged,
+                        advancedDpiTarget: advancedDpiTarget,
+                        onAdvancedDpiTargetChanged: onAdvancedDpiTargetChanged,
+                        advancedGrayscale: advancedGrayscale,
+                        onAdvancedGrayscaleChanged: onAdvancedGrayscaleChanged,
+                        advancedStripMetadata: advancedStripMetadata,
+                        onAdvancedStripMetadataChanged: onAdvancedStripMetadataChanged,
                       ),
                       const Spacer(),
                       CompressInlineActions(

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Parchment PDF — Release build script
+# Parchiva PDF — Release build script
 # ============================================================================
 # Builds optimized release artifacts for Android and Windows.
 #

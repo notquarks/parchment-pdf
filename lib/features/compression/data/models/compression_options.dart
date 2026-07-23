@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
+
 class ProcessedImage {
   final Uint8List bytes;
   final int originalWidth;
@@ -29,44 +31,73 @@ class ProcessedImage {
   int get bytesReduced => originalSize - newSize;
 }
 
-enum CompressionPreset { light, balanced, aggressive, extreme }
-
 enum PdfCompressionMode { structural, imageOptimized, extremeRaster }
 
-class _PresetConfig {
-  final int quality;
-  final int dpiTarget;
-  final int dpiThreshold;
+enum CompressionPreset {
+  preserveDetail(
+    title: 'Preserve detail',
+    description: 'Best quality, moderate size reduction',
+    icon: Icons.hd_outlined,
+    mode: PdfCompressionMode.imageOptimized,
+    quality: 85,
+    dpiTarget: 180,
+    dpiThreshold: 225,
+  ),
+  balanced(
+    title: 'Balanced',
+    description: 'Good balance of quality and size',
+    icon: Icons.balance_outlined,
+    mode: PdfCompressionMode.imageOptimized,
+    quality: 70,
+    dpiTarget: 140,
+    dpiThreshold: 175,
+  ),
+  smallerFile(
+    title: 'Smaller file',
+    description: 'Stronger compression, some quality loss',
+    icon: Icons.compress,
+    mode: PdfCompressionMode.imageOptimized,
+    quality: 60,
+    dpiTarget: 110,
+    dpiThreshold: 140,
+  ),
+  extreme(
+    title: 'Extreme',
+    description: 'Maximum compression (destroys text selection)',
+    icon: Icons.speed,
+    mode: PdfCompressionMode.extremeRaster,
+    quality: 55,
+    dpiTarget: 96,
+    dpiThreshold: 0,
+  ),
+  structuralOnly(
+    title: 'Structural only',
+    description: 'Lossless optimization, no image changes',
+    icon: Icons.lock_outline,
+    mode: PdfCompressionMode.structural,
+    quality: 80,
+    dpiTarget: 0,
+    dpiThreshold: 0,
+  );
 
-  const _PresetConfig({
+  const CompressionPreset({
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.mode,
     required this.quality,
     required this.dpiTarget,
     required this.dpiThreshold,
   });
-}
 
-const Map<CompressionPreset, _PresetConfig> _presetConfigs = {
-  CompressionPreset.light: _PresetConfig(
-    quality: 85,
-    dpiTarget: 150,
-    dpiThreshold: 200,
-  ),
-  CompressionPreset.balanced: _PresetConfig(
-    quality: 75,
-    dpiTarget: 120,
-    dpiThreshold: 150,
-  ),
-  CompressionPreset.aggressive: _PresetConfig(
-    quality: 60,
-    dpiTarget: 96,
-    dpiThreshold: 120,
-  ),
-  CompressionPreset.extreme: _PresetConfig(
-    quality: 40,
-    dpiTarget: 72,
-    dpiThreshold: 96,
-  ),
-};
+  final String title;
+  final String description;
+  final IconData icon;
+  final PdfCompressionMode mode;
+  final int quality;
+  final int dpiTarget;
+  final int dpiThreshold;
+}
 
 class CompressionOptions {
   final int quality;
@@ -76,6 +107,7 @@ class CompressionOptions {
   final bool recompressJpeg;
   final bool downscale;
   final bool convertToGrayscale;
+  final bool stripMetadata;
   final PdfCompressionMode mode;
 
   const CompressionOptions({
@@ -86,15 +118,17 @@ class CompressionOptions {
     this.recompressJpeg = true,
     this.downscale = true,
     this.convertToGrayscale = false,
+    this.stripMetadata = false,
     this.mode = PdfCompressionMode.structural,
   });
 
   factory CompressionOptions.fromPreset(CompressionPreset preset) {
-    final config = _presetConfigs[preset]!;
     return CompressionOptions(
-      quality: config.quality,
-      dpiTarget: config.dpiTarget,
-      dpiThreshold: config.dpiThreshold,
+      quality: preset.quality,
+      dpiTarget: preset.dpiTarget,
+      dpiThreshold: preset.dpiThreshold,
+      mode: preset.mode,
+      downscale: preset.dpiTarget > 0,
     );
   }
 
@@ -124,6 +158,7 @@ class CompressionOptions {
     bool? recompressJpeg,
     bool? downscale,
     bool? convertToGrayscale,
+    bool? stripMetadata,
     PdfCompressionMode? mode,
   }) {
     return CompressionOptions(
@@ -134,6 +169,7 @@ class CompressionOptions {
       recompressJpeg: recompressJpeg ?? this.recompressJpeg,
       downscale: downscale ?? this.downscale,
       convertToGrayscale: convertToGrayscale ?? this.convertToGrayscale,
+      stripMetadata: stripMetadata ?? this.stripMetadata,
       mode: mode ?? this.mode,
     );
   }
@@ -180,8 +216,27 @@ class CompressionOptions {
       'recompressJpeg: $recompressJpeg, '
       'downscale: $downscale, '
       'convertToGrayscale: $convertToGrayscale, '
+      'stripMetadata: $stripMetadata, '
       'mode: $mode'
       ')';
+}
+
+class CompressionEstimate {
+  final int originalSize;
+  final int estimatedSize;
+
+  const CompressionEstimate({
+    required this.originalSize,
+    required this.estimatedSize,
+  });
+
+  int get estimatedBytesReduced => originalSize - estimatedSize;
+
+  double get estimatedReductionPercent => originalSize > 0
+      ? (estimatedBytesReduced / originalSize) * 100
+      : 0;
+
+  bool get hasMeaningfulReduction => estimatedSize < originalSize;
 }
 
 class CompressionResult {

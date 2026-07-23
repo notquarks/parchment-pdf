@@ -3,29 +3,18 @@ import 'optimizer_stub.dart'
     if (dart.library.js_interop) 'optimizer_stub.dart'
     as implementation;
 
-// ─── Status enum (shared by v1 and v2) ─────────────────────────────────────
 
 enum QpdfOptimizerStatus { completed, unavailable, cancelled, failed }
 
-// ─── Compression mode ───────────────────────────────────────────────────────
 
 enum QpdfCompressionMode {
-  /// Lossless structural optimization only (Flate recompression,
-  /// object streams, deduplication). No image resampling.
-  structural,
+      structural,
 
-  /// Content-preserving image optimization: downsample high-DPI images,
-  /// recompress JPEG, convert color spaces where safe. Text, links,
-  /// forms, and vectors remain intact.
-  imageOptimized,
+        imageOptimized,
 
-  /// Full-page raster mode: render each page to a bitmap and replace
-  /// content. Maximum compression but destroys text selectability and
-  /// forms.
-  extremeRaster,
+        extremeRaster,
 }
 
-// ─── V1 result (backward-compatible) ────────────────────────────────────────
 
 class QpdfOptimizerResult {
   final QpdfOptimizerStatus status;
@@ -36,7 +25,6 @@ class QpdfOptimizerResult {
   bool get wasCompleted => status == QpdfOptimizerStatus.completed;
 }
 
-// ─── V2 options ─────────────────────────────────────────────────────────────
 
 class QpdfOptimizerOptions {
   final QpdfCompressionMode mode;
@@ -73,15 +61,14 @@ class QpdfOptimizerOptions {
     this.stripMetadata = false,
     this.stripDocumentInfo = false,
     this.removeUnusedResources = false,
-    this.deduplicateImages = true,
+    this.deduplicateImages = false,
     this.preserveTransparency = true,
     this.maximumDecodedPixels = 150000000,
     this.memoryBudgetBytes = 512000000,
   });
 
-  /// Create options from a quality value, preserving v1 behavior.
-  factory QpdfOptimizerOptions.fromQuality(int quality) {
-    final safeQuality = quality.clamp(1, 100);
+    factory QpdfOptimizerOptions.fromQuality(int quality) {
+    final safeQuality = quality.clamp(1, 100).toInt();
     return QpdfOptimizerOptions(
       mode: QpdfCompressionMode.structural,
       jpegQuality: safeQuality,
@@ -89,16 +76,15 @@ class QpdfOptimizerOptions {
       dpiThreshold: 180,
       downsampleImages: false,
       recompressJpeg: true,
-      deduplicateImages: true,
+      deduplicateImages: false,
     );
   }
 
-  /// Create balanced image-optimized options from a quality value.
-  factory QpdfOptimizerOptions.imageOptimized(int quality) {
-    final safeQuality = quality.clamp(1, 100);
+    factory QpdfOptimizerOptions.imageOptimized(int quality) {
+    final safeQuality = quality.clamp(1, 100).toInt();
     final (dpi, threshold) = switch (safeQuality) {
       >= 85 => (180, 225),
-      >= 65 => (144, 180),
+      >= 65 => (140, 175),
       >= 45 => (110, 140),
       _ => (96, 120),
     };
@@ -109,7 +95,7 @@ class QpdfOptimizerOptions {
       dpiThreshold: threshold,
       downsampleImages: true,
       recompressJpeg: true,
-      deduplicateImages: true,
+      deduplicateImages: false,
       preserveTransparency: true,
     );
   }
@@ -130,7 +116,7 @@ class QpdfOptimizerOptions {
   }) {
     return QpdfOptimizerOptions(
       mode: mode ?? this.mode,
-      jpegQuality: (jpegQuality ?? this.jpegQuality).clamp(1, 100),
+      jpegQuality: (jpegQuality ?? this.jpegQuality).clamp(1, 100).toInt(),
       targetDpi: targetDpi ?? this.targetDpi,
       dpiThreshold: dpiThreshold ?? this.dpiThreshold,
       minimumWidth: minimumWidth,
@@ -164,7 +150,6 @@ class QpdfOptimizerOptions {
       ')';
 }
 
-// ─── V2 result ──────────────────────────────────────────────────────────────
 
 class QpdfOptimizerResultV2 {
   final QpdfOptimizerStatus status;
@@ -213,13 +198,14 @@ class QpdfOptimizerResultV2 {
       ')';
 
   String _formatSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+    if (bytes < 1000) return '$bytes B';
+    if (bytes < 1000 * 1000) {
+      return '${(bytes / 1000).toStringAsFixed(1)} kB';
+    }
+    return '${(bytes / 1000000).toStringAsFixed(1)} MB';
   }
 }
 
-// ─── Analysis results ──────────────────────────────────────────────────────
 
 class QpdfImageInfo {
   final int objectNumber;
@@ -280,25 +266,22 @@ class QpdfAnalysisResult {
       'imgBytes: ${_fmt(totalImageBytes)}, '
       'encrypted: $isEncrypted, signed: $hasSignatures)';
 
-  String _fmt(int b) {
-    if (b < 1024) return '$b B';
-    if (b < 1024 * 1024) return '${(b / 1024).toStringAsFixed(1)} KB';
-    return '${(b / 1024 / 1024).toStringAsFixed(1)} MB';
+  String _fmt(int bytes) {
+    if (bytes < 1000) return '$bytes B';
+    if (bytes < 1000 * 1000) {
+      return '${(bytes / 1000).toStringAsFixed(1)} kB';
+    }
+    return '${(bytes / 1000000).toStringAsFixed(1)} MB';
   }
 }
 
-// ─── V1 Optimizer (backward-compatible wrapper) ─────────────────────────────
 
-/// Optimizes PDFs through qpdf on Windows and Android.
-///
-/// This is the v1 interface. New code should use [optimizeV2] with
-/// [QpdfOptimizerOptions] for full control over compression modes,
-/// DPI targets, and feature flags.
 class QpdfOptimizer {
   const QpdfOptimizer();
 
-  /// V1 optimization — structural only, single quality parameter.
-  Future<QpdfOptimizerResult> optimize({
+  String get buildId => implementation.buildId();
+
+    Future<QpdfOptimizerResult> optimize({
     required String inputPath,
     required String outputPath,
     required int quality,
@@ -312,8 +295,7 @@ class QpdfOptimizer {
     );
   }
 
-  /// V2 optimization — full options control.
-  Future<QpdfOptimizerResultV2> optimizeV2({
+    Future<QpdfOptimizerResultV2> optimizeV2({
     required String inputPath,
     required String outputPath,
     required QpdfOptimizerOptions options,
@@ -327,8 +309,7 @@ class QpdfOptimizer {
     );
   }
 
-  /// Analyze a PDF and return image metadata, DPI info, and processability.
-  Future<QpdfAnalysisResult> analyzePdf(
+    Future<QpdfAnalysisResult> analyzePdf(
     String inputPath, {
     int dpiThreshold = 180,
   }) {

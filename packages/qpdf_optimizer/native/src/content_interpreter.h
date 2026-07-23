@@ -19,12 +19,9 @@ struct GraphicsState {
     double ctm[6];
 
     GraphicsState();
-    void push(const GraphicsState& parent);
+    void multiplyMatrix(const double matrix[6]);
     void concatCTM(double a, double b, double c, double d, double e, double f);
-    void multiplyMatrix(const double m[6]);
-    void getTransformedSize(
-        double& width_pts, double& height_pts,
-        double img_w, double img_h) const;
+    void getTransformedSize(double& width, double& height) const;
 };
 
 class ContentInterpreter {
@@ -34,39 +31,34 @@ public:
         int32_t page_index,
         int32_t form_object_number,
         int32_t form_depth,
+        double user_unit,
         const ImagePlacementCallback& callback);
 
+    void interpretPage(QPDFObjectHandle page);
     void interpret(QPDFObjectHandle content);
-    void interpretArray(QPDFObjectHandle contents_array);
-    void setVisited(std::unordered_set<int32_t>* visited);
+    void setResources(QPDFObjectHandle resources);
+    void setActiveForms(std::unordered_set<uint64_t>* active_forms);
+    void pushOperand(const std::string& value);
+    void dispatchOperator(const std::string& op);
 
 private:
     QPDF& qpdf_;
     int32_t page_index_;
     int32_t form_object_number_;
     int32_t form_depth_;
+    double user_unit_;
     ImagePlacementCallback callback_;
-    std::unordered_set<int32_t>* visited_;
-
-    std::vector<GraphicsState> gstack_;
     QPDFObjectHandle resources_;
+    std::vector<GraphicsState> graphics_stack_;
+    std::vector<std::string> operands_;
+    std::unordered_set<uint64_t>* active_forms_;
 
+    GraphicsState& current();
     void pushState();
     void popState();
-    GraphicsState& current();
-
     void handleDo(const std::string& name);
-    void handleInlineImage(QPDFObjectHandle::Token const& bi_token);
-    void processImageXObject(
-        QPDFObjectHandle image,
-        const std::string& resource_name);
+    void processImageXObject(QPDFObjectHandle image, const std::string& resource_name);
     void processFormXObject(QPDFObjectHandle form);
-    QPDFObjectHandle resolveResources(QPDFObjectHandle xobject);
 };
 
-bool parseDouble(const std::string& s, double& out);
-bool parseCM(const std::vector<std::string>& stack,
-             double& a, double& b, double& c,
-             double& d, double& e, double& f);
-
-#endif /* CONTENT_INTERPRETER_H */
+#endif

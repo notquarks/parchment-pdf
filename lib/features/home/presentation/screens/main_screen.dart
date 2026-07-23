@@ -24,7 +24,7 @@ class _MainScreenState extends State<MainScreen> {
       body: IndexedStack(
         index: _selectedPage,
         children: [
-          HomeScreen(title: 'Parchment', onViewAllFiles: _navigateToFiles),
+          HomeScreen(title: 'Parchiva', onViewAllFiles: _navigateToFiles),
           FilesScreen(),
           ToolsScreen(),
           SettingsScreen(),

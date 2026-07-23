@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf_tools/core/utils/pdf_utils.dart';
 import 'package:pdf_tools/core/utils/string_utils.dart';
+import 'package:pdf_tools/features/compression/data/models/compression_options.dart';
 import 'package:pdf_tools/features/home/presentation/widgets/preview_shortcut.dart';
 import 'package:pdfrx/pdfrx.dart';
 
@@ -10,6 +11,8 @@ class CompressPreviewCard extends StatelessWidget {
     super.key,
     required this.documentRef,
     required this.file,
+    this.estimate,
+    this.isEstimating = false,
     required this.layout,
   });
 
@@ -22,6 +25,8 @@ class CompressPreviewCard extends StatelessWidget {
 
   final PdfDocumentRef documentRef;
   final PickedPdfInfo file;
+  final CompressionEstimate? estimate;
+  final bool isEstimating;
   final CompressPreviewLayout layout;
 
   double get _maximumHeight {
@@ -55,10 +60,7 @@ class CompressPreviewCard extends StatelessWidget {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        _fileMetadata,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
+                      _buildFileMetadata(context),
                     ],
                   ),
                 ),
@@ -81,12 +83,38 @@ class CompressPreviewCard extends StatelessWidget {
     );
   }
 
-  String get _fileMetadata {
+  Widget _buildFileMetadata(BuildContext context) {
     final pageCount = file.pageCount;
     final pageLabel = pageCount == null
         ? 'Reading pages…'
         : '$pageCount ${pageCount == 1 ? 'page' : 'pages'}';
-    return '${formatBytes(file.sizeBytes, 2)} • $pageLabel';
+    final style = Theme.of(context).textTheme.bodySmall;
+    final original = formatBytes(file.sizeBytes, 2);
+
+    if (isEstimating) {
+      return Text('$original → Calculating… • $pageLabel', style: style);
+    }
+
+    final currentEstimate = estimate;
+    if (currentEstimate == null || !currentEstimate.hasMeaningfulReduction) {
+      return Text('$original • $pageLabel', style: style);
+    }
+
+    return Text.rich(
+      TextSpan(
+        style: style,
+        children: [
+          TextSpan(
+            text: original,
+            style: const TextStyle(decoration: TextDecoration.lineThrough),
+          ),
+          TextSpan(
+            text: '  →  ≈ ${formatBytes(currentEstimate.estimatedSize, 0)}'
+                ' • $pageLabel',
+          ),
+        ],
+      ),
+    );
   }
 }
 

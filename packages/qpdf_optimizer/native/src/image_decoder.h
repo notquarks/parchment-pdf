@@ -2,7 +2,6 @@
 #define IMAGE_DECODER_H
 
 #include <cstdint>
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -13,20 +12,27 @@
 
 struct DecodedImage {
     std::vector<uint8_t> pixels;
+    int32_t source_width;
+    int32_t source_height;
     int32_t width;
     int32_t height;
     int32_t channels;
     int32_t bits_per_component;
+    int32_t scale_denominator;
     bool has_smask;
     bool decoded;
 
     DecodedImage()
-        : width(0), height(0), channels(0),
-          bits_per_component(8), has_smask(false),
+        : source_width(0), source_height(0), width(0), height(0), channels(0),
+          bits_per_component(8), scale_denominator(1), has_smask(false),
           decoded(false) {}
 
-    int64_t pixel_count() const {
+    int64_t sample_count() const {
         return static_cast<int64_t>(width) * height * channels;
+    }
+
+    int64_t pixel_count() const {
+        return sample_count();
     }
 
     int64_t row_bytes() const {
@@ -34,13 +40,11 @@ struct DecodedImage {
     }
 
     uint8_t* scanline(int32_t y) {
-        return pixels.data() +
-               static_cast<int64_t>(y) * row_bytes();
+        return pixels.data() + static_cast<int64_t>(y) * row_bytes();
     }
 
     const uint8_t* scanline(int32_t y) const {
-        return pixels.data() +
-               static_cast<int64_t>(y) * row_bytes();
+        return pixels.data() + static_cast<int64_t>(y) * row_bytes();
     }
 };
 
@@ -50,51 +54,35 @@ public:
         QPDF& qpdf,
         QPDFObjectHandle image,
         const ImageCandidate& candidate,
-        int64_t max_decoded_pixels = 150'000'000,
+        int32_t requested_width,
+        int32_t requested_height,
+        int64_t maximum_decoded_samples,
+        std::string& error);
+
+    static DecodedImage decode(
+        QPDF& qpdf,
+        QPDFObjectHandle image,
+        const ImageCandidate& candidate,
+        int64_t maximum_decoded_samples,
         std::string& error);
 
     static bool isFilterSupported(const std::string& filter);
-    static bool isColorSpaceSupported(const std::string& cs);
+    static bool isColorSpaceSupported(const ImageCandidate& candidate);
 
 private:
     static DecodedImage decodeDCT(
-        QPDF& qpdf,
         QPDFObjectHandle image,
         const ImageCandidate& candidate,
-        int64_t max_decoded_pixels,
+        int32_t requested_width,
+        int32_t requested_height,
+        int64_t maximum_decoded_samples,
         std::string& error);
 
-    static DecodedImage decodeFlate(
-        QPDF& qpdf,
+    static DecodedImage decodeLossless(
         QPDFObjectHandle image,
         const ImageCandidate& candidate,
-        int64_t max_decoded_pixels,
+        int64_t maximum_decoded_samples,
         std::string& error);
-
-    static void reversePNGFilter(
-        uint8_t filter,
-        const uint8_t* prev_row,
-        uint8_t* row,
-        int32_t row_stride,
-        int32_t bpp);
-
-    static bool expandIndexed(
-        const uint8_t* indexed_data,
-        int32_t width,
-        int32_t height,
-        int32_t bits_per_component,
-        QPDFObjectHandle color_space_array,
-        std::vector<uint8_t>& rgb_pixels,
-        std::string& error);
-
-    static int32_t channelsForColorSpace(const std::string& cs);
-
-    static bool getFlateDecodeParms(
-        QPDFObjectHandle image,
-        int32_t& predictor,
-        int32_t& colors,
-        int32_t& bits_per_component,
-        int32_t& columns);
 };
 
-#endif /* IMAGE_DECODER_H */
+#endif

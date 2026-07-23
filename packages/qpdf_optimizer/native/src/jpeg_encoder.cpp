@@ -14,7 +14,7 @@ namespace {
 
 struct JpegErrorManager {
     struct jpeg_error_mgr pub;
-    std::jmp_buf jump_buffer;
+    jmp_buf jump_buffer;
     char error_msg[JMSG_LENGTH_MAX];
 };
 
@@ -22,7 +22,7 @@ void jpegErrorExit(j_common_ptr cinfo)
 {
     auto* err = reinterpret_cast<JpegErrorManager*>(cinfo->err);
     (*cinfo->err->format_message)(cinfo, err->error_msg);
-    std::longjmp(err->jump_buffer, 1);
+    longjmp(err->jump_buffer, 1);
 }
 
 struct JpegMemDestination {
@@ -197,6 +197,7 @@ JpegEncoder::EncodeResult JpegEncoder::encode(
     int64_t original_bytes,
     std::string& error)
 {
+    static_cast<void>(original_bytes);
     auto result_420 = encodeWithSubsampling(
         decoded, quality, ChromaSubsampling::ratio_4_2_0, error);
     if (!result_420.success) return result_420;

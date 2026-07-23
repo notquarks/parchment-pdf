@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf_tools/core/utils/pdf_confirmation.dart';
 import 'package:pdf_tools/core/utils/string_utils.dart';
+import 'package:pdf_tools/core/widgets/action_bottom_bar.dart';
 import 'package:pdf_tools/features/compression/application/compression_controller.dart';
 import 'package:pdf_tools/features/compression/data/models/task_messages.dart';
 import 'package:pdf_tools/features/compression/data/services/compression_worker.dart';
@@ -37,9 +38,9 @@ class _CompressScreenState extends State<CompressScreen> {
       settingsService: SettingsProvider.of(context).settingsService,
       onError: (message) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
       },
       isMounted: () => mounted,
     );
@@ -74,8 +75,7 @@ class _CompressScreenState extends State<CompressScreen> {
         ),
         PdfConfirmationRow(
           label: 'Compression',
-          value:
-              '${_c.compressionLabel} • ${_c.quality}% quality',
+          value: '${_c.compressionLabel} • ${_c.quality}% quality',
         ),
         PdfConfirmationRow(
           label: 'Save to',
@@ -93,9 +93,7 @@ class _CompressScreenState extends State<CompressScreen> {
 
   void _startCompression() {
     final cancelToken = CancellationToken();
-    final compressFuture = _c.compressFiles(
-      cancelToken: cancelToken,
-    );
+    final compressFuture = _c.compressFiles(cancelToken: cancelToken);
 
     Navigator.pushReplacement(
       context,
@@ -115,8 +113,7 @@ class _CompressScreenState extends State<CompressScreen> {
     return ListenableBuilder(
       listenable: _c,
       builder: (context, _) {
-        final isCompact =
-            MediaQuery.sizeOf(context).width < _compactBreakpoint;
+        final isCompact = MediaQuery.sizeOf(context).width < _compactBreakpoint;
         final hasFiles = _c.hasFiles;
 
         return CallbackShortcuts(
@@ -131,18 +128,30 @@ class _CompressScreenState extends State<CompressScreen> {
             child: Scaffold(
               appBar: AppBar(
                 title: const Text('Compress PDFs'),
-                backgroundColor:
-                    Theme.of(context).colorScheme.surfaceContainerHigh,
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHigh,
               ),
               body: hasFiles
                   ? CompressWorkspace(
                       documentRef: _c.documentRef!,
                       files: _c.pickedFiles,
                       selectedIndex: _c.selectedIndex,
-                      quality: _c.quality,
+                      selectedPreset: _c.selectedPreset,
+                      advancedQuality: _c.advancedQuality,
+                      advancedDpiTarget: _c.advancedDpiTarget,
+                      advancedGrayscale: _c.advancedGrayscale,
+                      advancedStripMetadata: _c.advancedStripMetadata,
                       savePath: _c.savePath,
                       totalInputSize: _c.totalInputSize,
-                      onQualityChanged: _c.setQuality,
+                      estimate: _c.selectedEstimate,
+                      isEstimating: _c.isEstimatingSelected,
+                      onPresetChanged: _c.setPreset,
+                      onAdvancedQualityChanged: _c.setAdvancedQuality,
+                      onAdvancedDpiTargetChanged: _c.setAdvancedDpiTarget,
+                      onAdvancedGrayscaleChanged: _c.setAdvancedGrayscale,
+                      onAdvancedStripMetadataChanged:
+                          _c.setAdvancedStripMetadata,
                       onAddFiles: _c.pickFiles,
                       onCompress: _confirmAndStartCompression,
                       onFileSelected: _c.selectFile,
@@ -152,7 +161,8 @@ class _CompressScreenState extends State<CompressScreen> {
                           await _c.clearFiles();
                           return;
                         }
-                        final shouldClear = await showDialog<bool>(
+                        final shouldClear =
+                            await showDialog<bool>(
                               context: context,
                               builder: (context) => AlertDialog(
                                 title: const Text('Remove all files?'),
@@ -182,61 +192,21 @@ class _CompressScreenState extends State<CompressScreen> {
                     )
                   : CompressEmptyState(onPick: _c.pickFiles),
               bottomNavigationBar: hasFiles && isCompact
-                  ? SafeArea(
-                      top: false,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surface,
-                          border: Border(
-                            top: BorderSide(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .outlineVariant,
-                            ),
+                  ? ActionBottomBar(
+                      label:
+                          '${_c.pickedFiles.length} ${_c.pickedFiles.length == 1 ? 'file' : 'files'}',
+                      value: formatBytes(_c.totalInputSize, 2),
+                      actions: [
+                        FilledButton.icon(
+                          onPressed: _confirmAndStartCompression,
+                          icon: const Icon(Icons.compress),
+                          label: Text(
+                            _c.pickedFiles.length == 1
+                                ? 'Compress'
+                                : 'Compress ${_c.pickedFiles.length}',
                           ),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: _bottomBarHorizontalPadding,
-                            vertical: _bottomBarVerticalPadding,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '${_c.pickedFiles.length} ${_c.pickedFiles.length == 1 ? 'file' : 'files'}',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelLarge,
-                                    ),
-                                    Text(
-                                      formatBytes(_c.totalInputSize, 2),
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: _bottomBarSpacing),
-                              FilledButton.icon(
-                                onPressed: _confirmAndStartCompression,
-                                icon: const Icon(Icons.compress),
-                                label: Text(
-                                  _c.pickedFiles.length == 1
-                                      ? 'Compress'
-                                      : 'Compress ${_c.pickedFiles.length}',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                      ],
                     )
                   : null,
             ),

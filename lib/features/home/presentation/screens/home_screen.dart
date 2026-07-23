@@ -66,24 +66,46 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.all(4.0),
           sliver: SliverLayoutBuilder(
             builder: (context, constraints) {
-              const maxCrossAxisExtent = 200.0;
+              const minPortraitCardWidth = 128.0;
+              const maxColumns = 4;
+              const maxPortraitRows = 2;
+
               const crossAxisSpacing = 8.0;
               const mainAxisSpacing = 8.0;
-              const maxColumns = 4;
+
               const cardHeightCompact = 200.0;
               const cardHeightWide = 128.0;
-              final extent = constraints.crossAxisExtent;
+
+              final availableWidth = constraints.crossAxisExtent;
+              final isPortrait =
+                  MediaQuery.orientationOf(context) == Orientation.portrait;
+
               var crossAxisCount =
-                  (extent / (maxCrossAxisExtent + crossAxisSpacing)).ceil();
-              if (crossAxisCount < 1) crossAxisCount = 1;
-              if (crossAxisCount > maxColumns) crossAxisCount = maxColumns;
-              final usable = extent - crossAxisSpacing * (crossAxisCount - 1);
-              final cardWidth = usable / crossAxisCount;
+                  ((availableWidth + crossAxisSpacing) /
+                          (minPortraitCardWidth + crossAxisSpacing))
+                      .floor();
+              crossAxisCount = crossAxisCount.clamp(1, maxColumns);
+
+              final usableWidth =
+                  availableWidth - crossAxisSpacing * (crossAxisCount - 1);
+              final cardWidth = usableWidth / crossAxisCount;
+
               final compact = cardWidth < ItemCard.gridBreakpoint;
               final cardHeight = compact ? cardHeightCompact : cardHeightWide;
+
               final childAspectRatio = cardWidth > 0
                   ? cardWidth / cardHeight
                   : 1.0;
+
+              final maxVisibleItems = isPortrait
+                  ? crossAxisCount * maxPortraitRows
+                  : toolDefinitions.length;
+
+              final visibleItemCount = toolDefinitions.length.clamp(
+                0,
+                maxVisibleItems,
+              );
+
               return SliverGrid(
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: crossAxisCount,
@@ -91,16 +113,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisSpacing: crossAxisSpacing,
                   mainAxisSpacing: mainAxisSpacing,
                 ),
-                delegate: SliverChildListDelegate([
-                  for (final tool in toolDefinitions)
-                    ItemCard(
-                      title: tool.title,
-                      subtitle: tool.subtitle,
-                      icon: Icon(tool.icon, size: 28),
-                      onTap: () => Navigator.pushNamed(context, tool.route),
-                      isCompact: compact,
-                    ),
-                ]),
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final tool = toolDefinitions[index];
+                  return ItemCard(
+                    title: tool.title,
+                    subtitle: tool.subtitle,
+                    icon: Icon(tool.icon, size: 28),
+                    onTap: () => Navigator.pushNamed(context, tool.route),
+                    isCompact: compact,
+                  );
+                }, childCount: visibleItemCount),
               );
             },
           ),

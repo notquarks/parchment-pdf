@@ -10,6 +10,8 @@ import '../models/compression_options.dart';
 import 'compression_worker.dart';
 import 'image_processor.dart';
 import 'pdf_optimizer.dart';
+import 'raster_service.dart';
+import 'package:flutter/foundation.dart';
 
 class CompressionService {
   final CompressionWorker _worker;
@@ -30,19 +32,14 @@ class CompressionService {
     _ensureNotDisposed();
   }
 
-  /// Analyze a PDF using both the native qpdf analyzer (for structural
-  /// metadata and DPI info) and the Dart extractor (for image byte sizes).
-  ///
-  /// When [filePath] is provided, the native analyzer is used for accurate
-  /// DPI and placement data.  Otherwise only the Dart extractor runs.
-  Future<CompressionAnalysis> analyzePdf({
+            Future<CompressionAnalysis> analyzePdf({
     required DataSource source,
     required CompressionOptions options,
     String? filePath,
   }) async {
     _ensureNotDisposed();
 
-    /* Try native analysis first for accurate DPI and placement data. */
+    
     qpdf.QpdfAnalysisResult? nativeResult;
     if (filePath != null) {
       try {
@@ -51,11 +48,11 @@ class CompressionService {
           dpiThreshold: options.dpiThreshold,
         );
       } catch (_) {
-        /* Fall through to Dart-only analysis */
+        
       }
     }
 
-    /* Dart-side analysis via pdf_manipulator for image byte extraction. */
+    
     final pdf = Pdf();
     try {
       final doc = await pdf.open(source);
@@ -100,7 +97,8 @@ class CompressionService {
         return CompressionAnalysis(
           totalPages: nativeResult?.pageCount ?? pageCount,
           totalImages: nativeResult?.imageCount ?? images.length,
-          imagesToProcess: nativeResult?.processableCount ??
+          imagesToProcess:
+              nativeResult?.processableCount ??
               images.where((i) => i.shouldProcess(options)).length,
           totalOriginalSize: totalOriginalSize,
           estimatedCompressedSize: estimatedCompressedSize,
@@ -112,6 +110,47 @@ class CompressionService {
       }
     } finally {
       await pdf.dispose();
+    }
+  }
+
+  Future<CompressionEstimate> estimatePdf({
+    required String filePath,
+    required CompressionOptions options,
+    CancellationToken? cancelToken,
+  }) async {
+    _ensureNotDisposed();
+    final inputFile = File(filePath);
+    if (!await inputFile.exists()) {
+      throw FileSystemException('Input PDF does not exist', filePath);
+    }
+
+    final temporaryDirectory = await Directory.systemTemp.createTemp(
+      'pdf_tools_compression_estimate_',
+    );
+    final estimateOutput = File(
+      '${temporaryDirectory.path}${Platform.pathSeparator}estimate.pdf',
+    );
+
+    try {
+      final result = await compressPdf(
+        filePath: filePath,
+        options: options,
+        outputPath: estimateOutput.path,
+        cancelToken: cancelToken,
+      );
+      return CompressionEstimate(
+        originalSize: result.originalSize,
+        estimatedSize: result.wasCompressed
+            ? result.compressedSize
+            : result.originalSize,
+      );
+    } finally {
+      try {
+        if (await temporaryDirectory.exists()) {
+          await temporaryDirectory.delete(recursive: true);
+        }
+      } on FileSystemException {
+              }
     }
   }
 
@@ -148,24 +187,69 @@ class CompressionService {
       _throwIfCancelled(cancelToken);
       final totalPages = await _pageCount(filePath);
 
-      /* Route by compression mode.
-         Phase 2+ will implement the native image-analyzer + rewriter
-         for imageOptimized mode.  For now we accept it and fall through
-         to the structural pass — the v2 native layer handles the flag
-         but cannot yet resample images.  extremeRaster is stubbed
-         behind a clear error until Phase 5. */
+      
       switch (options.mode) {
         case PdfCompressionMode.structural:
         case PdfCompressionMode.imageOptimized:
-          /* Both go through the native qpdf optimizer.  The v2 C API
-             receives the mode flag so it can skip optimizeImages() in
-             image-optimized mode (future native image rewriter will
-             handle images before the structural pass). */
+          
           break;
         case PdfCompressionMode.extremeRaster:
-          throw const PdfOptimizerException(
-            'Extreme raster mode is not yet implemented. '
-            'Use structural or imageOptimized mode.',
+          final rasterService = RasterCompressionService();
+          await rasterService.rasterizePdf(
+            inputPath: filePath,
+            outputPath: temporaryFile.path,
+            options: RasterOptions(
+              targetDpi: options.dpiTarget,
+              jpegQuality: options.quality,
+              grayscale: options.convertToGrayscale,
+            ),
+            cancelToken: cancelToken,
+            onProgress: onProgress,
+          );
+                              if (!await temporaryFile.exists() ||
+              await temporaryFile.length() == 0) {
+            throw const PdfOptimizerException(
+              'Raster mode produced an empty output file',
+            );
+          }
+          _throwIfCancelled(cancelToken);
+          final attemptedSize = await temporaryFile.length();
+          final bytesSaved = originalSize - attemptedSize;
+          final minimumUsefulSaving = _minimumUsefulPdfSaving(originalSize);
+
+          debugPrint(
+            '[PDF-COMPRESS] OUTPUT '
+            'original=$originalSize '
+            'attempted=$attemptedSize '
+            'saved=$bytesSaved '
+            'minimumUsefulSaving=$minimumUsefulSaving '
+            'accepted=${bytesSaved >= minimumUsefulSaving}',
+          );
+
+          if (bytesSaved < minimumUsefulSaving) {
+            onProgress?.call(1, 1);
+            return CompressedPdfResult(
+              originalSize: originalSize,
+              compressedSize: originalSize,
+              attemptedSize: attemptedSize,
+            );
+          }
+          await _validateOutput(
+            path: temporaryFile.path,
+            expectedPageCount: totalPages,
+          );
+          _throwIfCancelled(cancelToken);
+          await _commitOutput(
+            temporaryFile: temporaryFile,
+            outputFile: outputFile,
+            operationId: operationId,
+          );
+          onProgress?.call(1, 1);
+          return CompressedPdfResult(
+            outputPath: outputPath,
+            originalSize: originalSize,
+            compressedSize: attemptedSize,
+            attemptedSize: attemptedSize,
           );
       }
 

@@ -1,5 +1,7 @@
 import 'api.dart';
 
+String buildId() => 'unavailable';
+
 Future<QpdfOptimizerResult> optimizeV1({
   required String inputPath,
   required String outputPath,

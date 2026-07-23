@@ -45,9 +45,7 @@ void main(List<String> arguments) async {
     final libraryPath = p.join(buildDirectory, 'output', libraryName);
     final compiler = code.cCompiler;
 
-    // For Android, Flutter hooks may not supply a C toolchain.
-    // Discover the NDK clang compiler and toolchain file ourselves.
-    String? ndkClang;
+            String? ndkClang;
     String? ndkClangXX;
     String? toolchainFile;
     if (code.targetOS == OS.android && compiler == null) {
@@ -78,17 +76,13 @@ void main(List<String> arguments) async {
       }
     }
 
-    // Resolve effective compiler paths
-    final effectiveCCompiler = ndkClang ?? p.fromUri(compiler!.compiler);
+        final effectiveCCompiler = ndkClang ?? p.fromUri(compiler!.compiler);
     final effectiveCxxCompiler =
         ndkClangXX ?? _cxxCompiler(compiler!.compiler);
 
-    // For Android, use Ninja from the NDK (or system ninja) since the NDK
-    // toolchain file doesn't support MSVC.
-    String? androidNinja;
+            String? androidNinja;
     if (code.targetOS == OS.android) {
-      // Try NDK-bundled ninja first
-      if (ndkClang != null) {
+            if (ndkClang != null) {
         final ndkNinja = p.join(
           p.dirname(ndkClang),
           'ninja${Platform.isWindows ? '.exe' : ''}',
@@ -97,8 +91,7 @@ void main(List<String> arguments) async {
           androidNinja = ndkNinja;
         }
       }
-      // Fall back to system ninja
-      androidNinja ??= 'ninja';
+            androidNinja ??= 'ninja';
     }
 
     final cmakeArguments = <String>[
@@ -121,9 +114,7 @@ void main(List<String> arguments) async {
     ];
 
     if (code.targetOS == OS.android) {
-      // ANDROID_ABI and ANDROID_PLATFORM must be set BEFORE the toolchain file
-      // on the command line so the Android CMake toolchain picks them up.
-      final abi = _androidAbi(code.targetArchitecture);
+                  final abi = _androidAbi(code.targetArchitecture);
       final api = code.android.targetNdkApi;
       cmakeArguments.addAll([
         '-DANDROID_ABI=$abi',
@@ -179,6 +170,14 @@ void main(List<String> arguments) async {
     output.dependencies.add(
       input.packageRoot.resolve('native/include/qpdf_optimizer_bridge.h'),
     );
+    _addDirectoryDependencies(
+      output,
+      Directory(p.join(packageRoot, 'native', 'src')),
+    );
+    _addDirectoryDependencies(
+      output,
+      Directory(p.join(packageRoot, 'native', 'include')),
+    );
     _addNativeDependencies(output, thirdPartyRoot);
   });
 }
@@ -192,18 +191,14 @@ Future<ProcessResult> _runCmake({
     return Process.run('cmake', arguments);
   }
 
-  // Try to find a developer command prompt
-  final prompt = compiler?.windows.developerCommandPrompt ?? 
+    final prompt = compiler?.windows.developerCommandPrompt ?? 
       await _findDeveloperCommandPrompt();
   
   if (prompt == null) {
-    // Fallback: try running cmake directly and hope nmake is in PATH
-    // This is unlikely to work, but we'll try
-    return Process.run('cmake', arguments);
+            return Process.run('cmake', arguments);
   }
 
-  // Use the developer command prompt
-  final script = File(
+    final script = File(
     p.join(
       Directory.systemTemp.path,
       'qpdf_optimizer_${DateTime.now().microsecondsSinceEpoch}.cmd',
@@ -228,8 +223,7 @@ Future<ProcessResult> _runCmake({
 }
 
 Future<DeveloperCommandPrompt?> _findDeveloperCommandPrompt() async {
-  // Try to find VS Developer Command Prompt
-  final vsWhere = r'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe';
+    final vsWhere = r'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe';
   if (File(vsWhere).existsSync()) {
     final result = await Process.run(vsWhere, [
       '-latest',
@@ -249,8 +243,7 @@ Future<DeveloperCommandPrompt?> _findDeveloperCommandPrompt() async {
     }
   }
   
-  // Try common VS installation paths
-  final paths = [
+    final paths = [
     r'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat',
     r'C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\Tools\VsDevCmd.bat',
     r'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat',

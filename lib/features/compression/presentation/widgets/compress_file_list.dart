@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf_tools/core/utils/pdf_utils.dart';
 import 'package:pdf_tools/core/utils/string_utils.dart';
+import 'package:pdf_tools/features/compression/data/models/compression_options.dart';
 
 class CompressFileList extends StatelessWidget {
   const CompressFileList({
@@ -11,6 +12,8 @@ class CompressFileList extends StatelessWidget {
     required this.axis,
     required this.onSelected,
     required this.onRemoved,
+    this.selectedEstimate,
+    this.isEstimatingSelected = false,
     this.shrinkWrap = false,
     this.physics,
   });
@@ -25,6 +28,8 @@ class CompressFileList extends StatelessWidget {
   final Axis axis;
   final ValueChanged<int> onSelected;
   final ValueChanged<int> onRemoved;
+  final CompressionEstimate? selectedEstimate;
+  final bool isEstimatingSelected;
   final bool shrinkWrap;
   final ScrollPhysics? physics;
 
@@ -43,6 +48,8 @@ class CompressFileList extends StatelessWidget {
             child: _CompressFileTile(
               file: files[index],
               selected: index == selectedIndex,
+              estimate: index == selectedIndex ? selectedEstimate : null,
+              isEstimating: index == selectedIndex && isEstimatingSelected,
               onSelected: () => onSelected(index),
               onRemoved: () => onRemoved(index),
             ),
@@ -60,6 +67,8 @@ class CompressFileList extends StatelessWidget {
       itemBuilder: (context, index) => _CompressFileTile(
         file: files[index],
         selected: index == selectedIndex,
+        estimate: index == selectedIndex ? selectedEstimate : null,
+        isEstimating: index == selectedIndex && isEstimatingSelected,
         onSelected: () => onSelected(index),
         onRemoved: () => onRemoved(index),
       ),
@@ -71,6 +80,8 @@ class _CompressFileTile extends StatelessWidget {
   const _CompressFileTile({
     required this.file,
     required this.selected,
+    required this.estimate,
+    required this.isEstimating,
     required this.onSelected,
     required this.onRemoved,
   });
@@ -82,6 +93,8 @@ class _CompressFileTile extends StatelessWidget {
 
   final PickedPdfInfo file;
   final bool selected;
+  final CompressionEstimate? estimate;
+  final bool isEstimating;
   final VoidCallback onSelected;
   final VoidCallback onRemoved;
 
@@ -91,8 +104,18 @@ class _CompressFileTile extends StatelessWidget {
     final pageText = file.pageCount == null
         ? 'Reading pages…'
         : '${file.pageCount} ${file.pageCount == 1 ? 'page' : 'pages'}';
+    final originalSize = formatBytes(file.sizeBytes, 2);
+    var estimateText = '';
+    if (isEstimating) {
+      estimateText = ', estimated size calculating';
+    } else if (estimate?.hasMeaningfulReduction == true) {
+      estimateText =
+          ', estimated compressed size '
+          '${formatBytes(estimate!.estimatedSize, 0)}';
+    }
     final semanticsLabel =
-        '${p.basename(file.file.path)}, ${formatBytes(file.sizeBytes, 2)}, $pageText${selected ? ', selected' : ''}';
+        '${p.basename(file.file.path)}, $originalSize$estimateText, '
+        '$pageText${selected ? ', selected' : ''}';
 
     return Semantics(
       button: true,
@@ -145,11 +168,11 @@ class _CompressFileTile extends StatelessWidget {
                         style: Theme.of(context).textTheme.labelLarge,
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        '${formatBytes(file.sizeBytes, 2)} • $pageText',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
+                      _FileSizeEstimate(
+                        originalSize: originalSize,
+                        estimate: estimate,
+                        isEstimating: isEstimating,
+                        pageText: pageText,
                       ),
                     ],
                   ),
@@ -164,6 +187,60 @@ class _CompressFileTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _FileSizeEstimate extends StatelessWidget {
+  const _FileSizeEstimate({
+    required this.originalSize,
+    required this.estimate,
+    required this.isEstimating,
+    required this.pageText,
+  });
+
+  final String originalSize;
+  final CompressionEstimate? estimate;
+  final bool isEstimating;
+  final String pageText;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.bodySmall;
+    if (isEstimating) {
+      return Text(
+        '$originalSize → Calculating… • $pageText',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: style,
+      );
+    }
+
+    final value = estimate;
+    if (value == null || !value.hasMeaningfulReduction) {
+      return Text(
+        '$originalSize • $pageText',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: style,
+      );
+    }
+
+    return Text.rich(
+      TextSpan(
+        style: style,
+        children: [
+          TextSpan(
+            text: originalSize,
+            style: const TextStyle(decoration: TextDecoration.lineThrough),
+          ),
+          TextSpan(
+            text: ' → ≈ ${formatBytes(value.estimatedSize, 0)} • $pageText',
+          ),
+        ],
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 }

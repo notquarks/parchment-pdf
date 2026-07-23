@@ -1,345 +1,522 @@
 #include "pdf_analyzer.h"
 
 #include <algorithm>
+#include <exception>
 #include <cmath>
-#include <cstring>
 #include <unordered_map>
 #include <unordered_set>
 
-#include <qpdf/QPDF.hh>
+#include <qpdf/Buffer.hh>
 #include <qpdf/QPDFPageObjectHelper.hh>
 
 #include "content_interpreter.h"
-#include "image_candidate.h"
+#include "pdf_name_utils.h"
 
-/* ── PdfAnalyzer ──────────────────────────────────────────────────────── */
+namespace
+{
+
+    struct ColorInfo
+    {
+        std::string name;
+        ImageColorModel model = ImageColorModel::unknown;
+        int32_t components = 0;
+    };
+
+    ColorInfo resolveColorInfo(QPDFObjectHandle color_space)
+    {
+        ColorInfo info;
+        if (color_space.isName())
+        {
+            info.name = pdfName(color_space);
+            if (info.name == "DeviceGray")
+            {
+                info.model = ImageColorModel::gray;
+                info.components = 1;
+            }
+            else if (info.name == "DeviceRGB")
+            {
+                info.model = ImageColorModel::rgb;
+                info.components = 3;
+            }
+            else if (info.name == "DeviceCMYK")
+            {
+                info.model = ImageColorModel::cmyk;
+                info.components = 4;
+            }
+            return info;
+        }
+
+        if (!color_space.isArray() || color_space.getArrayNItems() == 0)
+        {
+            return info;
+        }
+
+        info.name = pdfName(color_space.getArrayItem(0));
+        if (info.name == "ICCBased" && color_space.getArrayNItems() > 1)
+        {
+            auto profile = color_space.getArrayItem(1);
+            if (profile.isStream())
+            {
+                auto component_count = profile.getDict().getKey("/N");
+                if (component_count.isInteger())
+                {
+                    info.components = component_count.getIntValueAsInt();
+                    if (info.components == 1)
+                    {
+                        info.model = ImageColorModel::gray;
+                    }
+                    else if (info.components == 3)
+                    {
+                        info.model = ImageColorModel::rgb;
+                    }
+                    else if (info.components == 4)
+                    {
+                        info.model = ImageColorModel::cmyk;
+                    }
+                }
+            }
+        }
+        else if (info.name == "Indexed" || info.name == "I")
+        {
+            info.model = ImageColorModel::indexed;
+            info.components = 1;
+        }
+        return info;
+    }
+
+    double pageUserUnit(QPDFPageObjectHelper &helper)
+    {
+        auto value = helper.getAttribute("/UserUnit", false);
+        if (!value.isNumber())
+        {
+            return 1.0;
+        }
+        double user_unit = value.getNumericValue();
+        return std::isfinite(user_unit) && user_unit > 0 ? user_unit : 1.0;
+    }
+
+    void addPlacements(
+        ImageCandidate &candidate,
+        const std::vector<ImagePlacement> &placements)
+    {
+        if (placements.empty() || candidate.placements.size() >= kMaxPlacements)
+        {
+            return;
+        }
+        auto remaining = static_cast<size_t>(kMaxPlacements) - candidate.placements.size();
+        auto count = std::min(remaining, placements.size());
+        candidate.placements.insert(
+            candidate.placements.end(), placements.begin(), placements.begin() + count);
+    }
+
+    void collectImage(
+        QPDFObjectHandle image,
+        const std::string &resource_name,
+        AnalysisResult &result,
+        std::unordered_map<uint64_t, size_t> &image_index,
+        const std::unordered_map<uint64_t, std::vector<ImagePlacement>> &placements_by_image,
+        std::unordered_set<uint64_t> &placements_attached)
+    {
+        if (!image.isStream())
+        {
+            return;
+        }
+
+        auto key = pdfObjectKey(image);
+        if (key == 0)
+        {
+            return;
+        }
+
+        auto existing = image_index.find(key);
+        if (existing != image_index.end())
+        {
+            auto &candidate = result.images[existing->second];
+            if (candidate.resource_name.empty())
+            {
+                candidate.resource_name = normalizePdfName(resource_name);
+            }
+            if (placements_attached.insert(key).second)
+            {
+                auto placement_it = placements_by_image.find(key);
+                if (placement_it != placements_by_image.end())
+                {
+                    addPlacements(candidate, placement_it->second);
+                }
+            }
+            return;
+        }
+
+        auto dictionary = image.getDict();
+        auto width = dictionary.getKey("/Width");
+        auto height = dictionary.getKey("/Height");
+        if (!width.isInteger() || !height.isInteger())
+        {
+            return;
+        }
+
+        ImageCandidate candidate;
+        candidate.object_number = image.getObjectID();
+        candidate.generation = image.getGeneration();
+        candidate.resource_name = normalizePdfName(resource_name);
+        candidate.width = width.getIntValueAsInt();
+        candidate.height = height.getIntValueAsInt();
+        if (candidate.width <= 0 || candidate.height <= 0)
+        {
+            return;
+        }
+
+        auto bits = dictionary.getKey("/BitsPerComponent");
+        if (bits.isInteger())
+        {
+            candidate.bits_per_component = bits.getIntValueAsInt();
+        }
+
+        auto color = resolveColorInfo(dictionary.getKey("/ColorSpace"));
+        candidate.color_space = color.name;
+        candidate.color_model = color.model;
+        candidate.color_components = color.components;
+
+        auto filter = imageFilterInfo(dictionary.getKey("/Filter"));
+        candidate.filter = filter.terminal;
+        candidate.has_generalized_filter_wrappers = filter.generalized_wrappers;
+        if (!filter.supported)
+        {
+            candidate.filter = "UnsupportedFilterChain";
+        }
+
+        auto mask = dictionary.getKey("/ImageMask");
+        candidate.is_image_mask = mask.isBool() && mask.getBoolValue();
+        candidate.has_smask = !dictionary.getKey("/SMask").isNull();
+
+        try
+        {
+            auto raw = image.getRawStreamData();
+            if (raw)
+            {
+                candidate.encoded_bytes = static_cast<int64_t>(raw->getSize());
+            }
+        }
+        catch (...)
+        {
+        }
+
+        auto placement_it = placements_by_image.find(key);
+        if (placement_it != placements_by_image.end())
+        {
+            addPlacements(candidate, placement_it->second);
+            placements_attached.insert(key);
+        }
+
+        image_index.emplace(key, result.images.size());
+        result.images.push_back(std::move(candidate));
+    }
+
+    void scanResources(
+        QPDFObjectHandle resources,
+        AnalysisResult &result,
+        std::unordered_map<uint64_t, size_t> &image_index,
+        const std::unordered_map<uint64_t, std::vector<ImagePlacement>> &placements_by_image,
+        std::unordered_set<uint64_t> &placements_attached,
+        std::unordered_set<uint64_t> &active_forms)
+    {
+        if (!resources.isDictionary())
+        {
+            return;
+        }
+
+        auto xobjects = resources.getKey("/XObject");
+        if (!xobjects.isDictionary())
+        {
+            return;
+        }
+        ++result.xobject_dictionaries;
+
+        for (auto const &[resource_name, value] : xobjects.getDictAsMap())
+        {
+            auto object = value;
+            if (!object.isStream())
+            {
+                continue;
+            }
+
+            auto dictionary = object.getDict();
+            auto subtype = pdfName(dictionary.getKey("/Subtype"));
+            if (subtype == "Image")
+            {
+                ++result.image_xobjects_seen;
+                collectImage(
+                    object,
+                    resource_name,
+                    result,
+                    image_index,
+                    placements_by_image,
+                    placements_attached);
+                continue;
+            }
+
+            if (subtype != "Form")
+            {
+                continue;
+            }
+
+            ++result.form_xobjects_seen;
+            auto form_key = pdfObjectKey(object);
+            if (form_key != 0 && !active_forms.insert(form_key).second)
+            {
+                continue;
+            }
+
+            auto form_resources = dictionary.getKey("/Resources");
+            if (form_resources.isNull())
+            {
+                form_resources = resources;
+            }
+            scanResources(
+                form_resources,
+                result,
+                image_index,
+                placements_by_image,
+                placements_attached,
+                active_forms);
+
+            if (form_key != 0)
+            {
+                active_forms.erase(form_key);
+            }
+        }
+    }
+
+} // namespace
 
 bool PdfAnalyzer::analyze(
-    QPDF& qpdf,
+    QPDF &qpdf,
+    int32_t target_dpi,
     int32_t dpi_threshold,
-    AnalysisResult& result,
-    std::string& error)
+    AnalysisResult &result,
+    std::string &error,
+    std::atomic<bool> *cancelled,
+    const std::function<void(int32_t, int32_t)> &progress)
 {
-    try {
-        result.page_count =
-            static_cast<int32_t>(qpdf.getAllPages().size());
-        result.file_bytes = 0;
-
+    try
+    {
+        result = AnalysisResult();
+        result.page_count = static_cast<int32_t>(qpdf.getAllPages().size());
         checkDocumentProperties(qpdf, result);
-        discoverImages(qpdf, result, dpi_threshold);
-        finalize(result, dpi_threshold);
 
+        ImageIndexMap image_index;
+        auto pages = qpdf.getAllPages();
+        auto total_pages = static_cast<int32_t>(pages.size());
+        int32_t page_index = 0;
+        for (auto const &page : pages)
+        {
+            if (cancelled && cancelled->load(std::memory_order_acquire))
+            {
+                error = "cancelled";
+                return false;
+            }
+            if (result.images.size() >= kMaxImageCandidates)
+            {
+                break;
+            }
+            processPage(qpdf, page, page_index, result, image_index);
+            ++page_index;
+            if (progress)
+            {
+                progress(page_index, total_pages);
+            }
+        }
+
+        finalize(result, target_dpi, dpi_threshold);
         return true;
-    } catch (std::exception const& e) {
-        error = std::string("Analysis failed: ") + e.what();
+    }
+    catch (std::exception const &exception)
+    {
+        error = std::string("Analysis failed: ") + exception.what();
         return false;
-    } catch (...) {
+    }
+    catch (...)
+    {
         error = "Analysis failed with unknown error";
         return false;
     }
 }
 
-/* ── Document properties ─────────────────────────────────────────────── */
-
-void PdfAnalyzer::checkDocumentProperties(
-    QPDF& qpdf, AnalysisResult& result)
+void PdfAnalyzer::checkDocumentProperties(QPDF &qpdf, AnalysisResult &result)
 {
     result.is_encrypted = qpdf.isEncrypted();
-
-
     result.has_signatures = false;
-    try {
-        auto trailer = qpdf.getTrailer();
-        if (!trailer.isNull()) {
-            auto root = trailer.getKey("/Root");
-            if (!root.isNull() && root.isDictionary()) {
-                auto acroform = root.getKey("/AcroForm");
-                if (!acroform.isNull() && acroform.isDictionary()) {
-                    auto fields = acroform.getKey("/Fields");
-                    if (!fields.isNull() && fields.isArray()) {
-                        auto n = fields.getArrayNItems();
-                        for (decltype(n) i = 0; i < n && !result.has_signatures; ++i) {
-                            auto field = fields.getArrayItem(i);
-                            if (field.isNull() || !field.isDictionary()) continue;
-                            auto ft = field.getKey("/FT");
-                            if (!ft.isNull() && ft.getName() == "Sig") {
-                                result.has_signatures = true;
-                            }
-                        }
-                    }
-                }
+
+    try
+    {
+        auto root = qpdf.getTrailer().getKey("/Root");
+        auto acroform = root.getKey("/AcroForm");
+        auto fields = acroform.getKey("/Fields");
+        if (!fields.isArray())
+        {
+            return;
+        }
+        auto count = fields.getArrayNItems();
+        for (decltype(count) i = 0; i < count; ++i)
+        {
+            auto field = fields.getArrayItem(i);
+            if (field.isDictionary() && pdfName(field.getKey("/FT")) == "Sig")
+            {
+                result.has_signatures = true;
+                return;
             }
         }
-    } catch (...) {}
-}
-
-/* ── Image discovery ─────────────────────────────────────────────────── */
-
-
-using ImageIndexMap = std::unordered_map<int32_t, size_t>;
-
-void PdfAnalyzer::discoverImages(
-    QPDF& qpdf,
-    AnalysisResult& result,
-    int32_t dpi_threshold)
-{
-    ImageIndexMap obj_index;
-    std::unordered_set<int32_t> visited_forms;
-    int32_t page_idx = 0;
-
-    auto pages = qpdf.getAllPages();
-    for (auto const& page : pages) {
-        processPage(qpdf, page, page_idx, dpi_threshold, result);
-        ++page_idx;
     }
-
-
+    catch (...)
+    {
+    }
 }
 
-/* ── Page processing ─────────────────────────────────────────────────── */
+const char *PdfAnalyzer::buildId()
+{
+    return "stream-dict";
+}
 
 void PdfAnalyzer::processPage(
-    QPDF& qpdf,
+    QPDF &qpdf,
     QPDFObjectHandle page,
     int32_t page_index,
-    int32_t dpi_threshold,
-    AnalysisResult& result)
+    AnalysisResult &result,
+    ImageIndexMap &image_index)
 {
+    QPDFPageObjectHelper helper(page);
+    auto resources = helper.getAttribute("/Resources", false);
 
-    auto resources = page.getKey("/Resources");
-    if (resources.isNull() || !resources.isDictionary()) return;
-
-
-    auto contents = page.getKey("/Contents");
-    if (contents.isNull()) return;
-
-
-    struct RawPlacement {
-        int32_t obj_num;
-        int32_t gen;
-        std::string resource_name;
-        ImagePlacement placement;
-    };
-    std::vector<RawPlacement> raw_placements;
-
-
-    auto callback = [&](const ImagePlacement& placement) {
-        /* We need the object number — get it from the Do operand.
-           The interpreter handles Do but we don't have the object
-           reference in the callback.  We'll need to restructure. */
-
-        /* For now, use a simpler approach: scan XObject resources
-           directly and compare against placements. */
-    };
-
-
-    std::vector<ImagePlacement> page_placements;
-    auto placement_cb = [&](const ImagePlacement& p) {
-        page_placements.push_back(p);
-    };
-
-    ContentInterpreter ci(qpdf, page_index, 0, 0, placement_cb);
-    ci.setVisited(&visited_forms);
-
-    if (contents.isStream()) {
-        ci.interpret(contents);
-    } else if (contents.isArray()) {
-        ci.interpretArray(contents);
+    std::unordered_map<uint64_t, std::vector<ImagePlacement>> placements_by_image;
+    if (resources.isDictionary())
+    {
+        ++result.pages_with_resources;
+        std::unordered_set<uint64_t> active_forms;
+        ContentInterpreter interpreter(
+            qpdf, page_index, 0, 0, pageUserUnit(helper),
+            [&](const ImagePlacement &placement)
+            {
+                auto key = pdfObjectKey(
+                    placement.object_number, placement.generation);
+                if (key == 0 || result.placement_count >= kMaxTotalPlacements)
+                {
+                    return;
+                }
+                placements_by_image[key].push_back(placement);
+                ++result.placement_count;
+            });
+        interpreter.setResources(resources);
+        interpreter.setActiveForms(&active_forms);
+        interpreter.interpretPage(page);
     }
 
-
-    auto xobjects = resources.getKey("/XObject");
-    if (xobjects.isNull() || !xobjects.isDictionary()) return;
-
-    auto xobj_dict = xobjects.getDictAsMap();
-    for (auto& [name, xobj_handle] : xobj_dict) {
-        auto xobj = xobj_handle;
-        if (xobj.isIndirect()) xobj = xobj.dereference();
-        if (xobj.isNull() || !xobj.isDictionary()) continue;
-
-        auto subtype = xobj.getKey("/Subtype");
-        if (subtype.isNull()) continue;
-        auto sub_name = subtype.getName();
-        if (sub_name != "Image") continue;
-
-
-        auto w = xobj.getKey("/Width");
-        auto h = xobj.getKey("/Height");
-        if (w.isNull() || h.isNull()) continue;
-
-        int32_t img_w = 0, img_h = 0;
-        try {
-            img_w = w.getIntValueAsInt();
-            img_h = h.getIntValueAsInt();
-        } catch (...) { continue; }
-        if (img_w <= 0 || img_h <= 0) continue;
-
-
-        int32_t obj_num = xobj.isIndirect()
-            ? xobj.getObjectGenerationNumber() : 0;
-        int32_t gen = xobj.isIndirect() ? xobj.getGeneration() : 0;
-
-
-        double best_dpi = 72;
-        for (auto& p : page_placements) {
-            double img_area = img_w * img_h;
-            double disp_area = p.displayed_width_pts * p.displayed_height_pts;
-            if (disp_area > 0) {
-                double implied_w = p.displayed_width_pts * img_w /
-                    (p.displayed_width_pts > 0 ? img_w : 1);
-                if (p.effective_dpi > best_dpi) {
-                    best_dpi = p.effective_dpi;
-                }
-            }
-        }
-
-
-        int64_t encoded_bytes = 0;
-        try {
-            auto stream = xobj.getStream();
-            encoded_bytes = stream->getSize();
-        } catch (...) {}
-
-
-        auto it = obj_index.find(obj_num);
-        if (it != obj_index.end()) {
-
-            auto& cand = result.images[it->second];
-            if (best_dpi > cand.max_effective_dpi) {
-                cand.max_effective_dpi = best_dpi;
-            }
-            cand.encoded_bytes += encoded_bytes;
-        } else {
-
-            ImageCandidate cand;
-            cand.object_number = obj_num;
-            cand.generation = gen;
-            cand.resource_name = name;
-            cand.width = img_w;
-            cand.height = img_h;
-            cand.encoded_bytes = encoded_bytes;
-            cand.max_effective_dpi = best_dpi;
-
-
-            auto cs = xobj.getKey("/ColorSpace");
-            if (!cs.isNull()) {
-                if (cs.isName()) {
-                    cand.color_space = cs.getName();
-                } else if (cs.isArray() && cs.getArrayNItems() > 0) {
-                    auto first = cs.getArrayItem(0);
-                    if (first.isName()) cand.color_space = first.getName();
-                }
-            }
-
-
-            auto filt = xobj.getKey("/Filter");
-            if (!filt.isNull()) {
-                if (filt.isName()) {
-                    cand.filter = filt.getName();
-                }
-            }
-
-
-            auto bpc = xobj.getKey("/BitsPerComponent");
-            if (!bpc.isNull()) {
-                try { cand.bits_per_component = bpc.getIntValueAsInt(); }
-                catch (...) {}
-            }
-
-
-            auto smask = xobj.getKey("/SMask");
-            cand.has_smask = !smask.isNull();
-
-
-            auto img_mask = xobj.getKey("/ImageMask");
-            cand.is_image_mask = (!img_mask.isNull() &&
-                                  img_mask.getIntValue() != 0);
-
-
-            ImagePlacement p;
-            p.page_index = page_index;
-            p.form_depth = 0;
-            p.form_object_number = 0;
-            p.effective_dpi = best_dpi;
-
-            p.displayed_width_pts = img_w * 72.0 / best_dpi;
-            p.displayed_height_pts = img_h * 72.0 / best_dpi;
-            std::memset(p.matrix, 0, sizeof(p.matrix));
-            p.matrix[0] = p.displayed_width_pts / img_w;
-            p.matrix[3] = p.displayed_height_pts / img_h;
-            cand.placements.push_back(p);
-
-            size_t idx = result.images.size();
-            result.images.push_back(cand);
-            if (obj_num > 0) obj_index[obj_num] = idx;
-        }
-    }
+    std::unordered_set<uint64_t> placements_attached;
+    std::unordered_set<uint64_t> active_forms;
+    scanResources(
+        resources,
+        result,
+        image_index,
+        placements_by_image,
+        placements_attached,
+        active_forms);
 }
 
-/* ── Finalize: derived fields, classification, processability ──────────── */
-
-void PdfAnalyzer::finalize(AnalysisResult& result, int32_t dpi_threshold)
+void PdfAnalyzer::finalize(
+    AnalysisResult &result,
+    int32_t target_dpi,
+    int32_t dpi_threshold)
 {
     result.image_count = static_cast<int32_t>(result.images.size());
-    result.placement_count = 0;
     result.high_dpi_count = 0;
     result.total_image_bytes = 0;
+    result.placement_count = 0;
 
-    for (auto& cand : result.images) {
+    for (auto &candidate : result.images)
+    {
+        result.total_image_bytes += candidate.encoded_bytes;
         result.placement_count +=
-            static_cast<int32_t>(cand.placements.size());
-        result.total_image_bytes += cand.encoded_bytes;
+            static_cast<int32_t>(candidate.placements.size());
 
-
-        int32_t max_req_w = cand.width;
-        int32_t max_req_h = cand.height;
-        for (auto& p : cand.placements) {
-            int32_t req_w = static_cast<int32_t>(
-                std::ceil(cand.width * 72.0 / p.effective_dpi));
-            int32_t req_h = static_cast<int32_t>(
-                std::ceil(cand.height * 72.0 / p.effective_dpi));
-            if (req_w > max_req_w) max_req_w = req_w;
-            if (req_h > max_req_h) max_req_h = req_h;
+        candidate.max_effective_dpi = 0;
+        int32_t required_width = 0;
+        int32_t required_height = 0;
+        for (auto const &placement : candidate.placements)
+        {
+            candidate.max_effective_dpi = std::max(
+                candidate.max_effective_dpi, placement.effective_dpi);
+            required_width = std::max(
+                required_width,
+                static_cast<int32_t>(std::ceil(
+                    placement.displayed_width_pts * target_dpi / 72.0)));
+            required_height = std::max(
+                required_height,
+                static_cast<int32_t>(std::ceil(
+                    placement.displayed_height_pts * target_dpi / 72.0)));
         }
 
-        cand.required_width = std::min(max_req_w, cand.width);
-        cand.required_height = std::min(max_req_h, cand.height);
+        candidate.required_width = candidate.placements.empty()
+                                       ? candidate.width
+                                       : std::clamp(required_width, 1, candidate.width);
+        candidate.required_height = candidate.placements.empty()
+                                        ? candidate.height
+                                        : std::clamp(required_height, 1, candidate.height);
 
-
-        if (cand.max_effective_dpi > dpi_threshold) {
-            result.high_dpi_count++;
+        if (candidate.max_effective_dpi > dpi_threshold)
+        {
+            ++result.high_dpi_count;
         }
 
-
-        cand.processable = false;
-        if (cand.is_image_mask || cand.is_inline) {
-            cand.processable = false;
-        } else if (cand.filter == "DCTDecode") {
-            cand.processable = true;
-        } else if (cand.filter == "FlateDecode" || cand.filter.empty()) {
-
-            if ((cand.color_space == "DeviceRGB" ||
-                 cand.color_space == "DeviceGray") &&
-                cand.bits_per_component == 8) {
-                cand.processable = true;
-            }
+        candidate.processable = false;
+        candidate.skip_reason = ImageSkipReason::none;
+        if (candidate.is_image_mask)
+        {
+            candidate.skip_reason = ImageSkipReason::image_mask;
+        }
+        else if (candidate.is_inline)
+        {
+            candidate.skip_reason = ImageSkipReason::inline_image;
+        }
+        else if (candidate.color_model != ImageColorModel::gray &&
+                 candidate.color_model != ImageColorModel::rgb)
+        {
+            candidate.skip_reason = ImageSkipReason::unsupported_color_space;
+        }
+        else if (candidate.color_components != 1 &&
+                 candidate.color_components != 3)
+        {
+            candidate.skip_reason = ImageSkipReason::unsupported_components;
+        }
+        else if (candidate.filter != "DCTDecode" &&
+                 candidate.filter != "FlateDecode" &&
+                 !candidate.filter.empty())
+        {
+            candidate.skip_reason = ImageSkipReason::unsupported_filter;
+        }
+        else if (candidate.bits_per_component != 8)
+        {
+            candidate.skip_reason = ImageSkipReason::unsupported_bit_depth;
+        }
+        else
+        {
+            candidate.processable = true;
         }
 
-        if (cand.bits_per_component == 1 || cand.is_image_mask) {
-            cand.kind = ImageCandidate::Kind::monochrome;
-        } else if (cand.color_space == "DeviceGray" &&
-                   cand.bits_per_component == 8) {
-            cand.kind = ImageCandidate::Kind::scanned_text;
-        } else if (cand.color_space == "DeviceRGB" &&
-                   cand.bits_per_component == 8) {
-            if (cand.max_effective_dpi >= 150 &&
-                cand.width * cand.height > 500000) {
-                cand.kind = ImageCandidate::Kind::photograph;
-            } else {
-                cand.kind = ImageCandidate::Kind::mixed;
-            }
-        } else {
-            cand.kind = ImageCandidate::Kind::mixed;
+        if (candidate.bits_per_component == 1 || candidate.is_image_mask)
+        {
+            candidate.kind = ImageCandidate::Kind::monochrome;
+        }
+        else if (candidate.color_model == ImageColorModel::gray)
+        {
+            candidate.kind = ImageCandidate::Kind::scanned_text;
+        }
+        else if (candidate.max_effective_dpi >= 150 &&
+                 static_cast<int64_t>(candidate.width) * candidate.height > 500000)
+        {
+            candidate.kind = ImageCandidate::Kind::photograph;
+        }
+        else
+        {
+            candidate.kind = ImageCandidate::Kind::mixed;
         }
     }
 }

@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.parchment.pdf"
+    namespace = "com.parchiva.pdf"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -14,7 +14,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.parchment.pdf"
+        applicationId = "com.parchiva.pdf"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

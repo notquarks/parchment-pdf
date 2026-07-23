@@ -98,7 +98,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             expandedHeight: 150,
           ),
           SliverPadding(
-            padding: const EdgeInsetsDirectional.only(start: 12, end: 12, bottom: 96),
+            padding: const EdgeInsetsDirectional.only(
+              start: 12,
+              end: 12,
+              bottom: 96,
+            ),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 Padding(
@@ -114,9 +118,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 M3ECardColumn(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 2,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
                   margin: EdgeInsets.zero,
                   children: [
                     ListTile(
@@ -174,7 +176,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         'Viewer Settings',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      onTap: () { Navigator.pushNamed(context, '/viewer_settings'); },
+                      onTap: () {
+                        Navigator.pushNamed(context, '/viewer_settings');
+                      },
                     ),
                     ListTile(
                       leading: const Icon(Symbols.code),
@@ -201,12 +205,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 M3ECardColumn(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 2,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
                   margin: EdgeInsets.zero,
                   children: [
-                    
                     ListTile(
                       leading: const Icon(Icons.info),
                       title: Text(
@@ -237,7 +238,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onTap: () async {
                         launchUrl(
                           Uri.parse(
-                            'https://github.com/notquarks/parchment-pdf',
+                            'https://github.com/notquarks/parchiva-pdf',
                           ),
                         );
                       },
