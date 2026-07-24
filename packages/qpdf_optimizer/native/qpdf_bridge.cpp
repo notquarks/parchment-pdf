@@ -47,42 +47,13 @@ namespace
 
     constexpr char kOptimizerBuildId[] = "image-pipeline";
 
-    enum Phase : int32_t
-    {
-        phase_idle = 0,
-        phase_opening = 1,
-        phase_analyzing = 2,
-        phase_processing_images = 3,
-        phase_structural_cleanup = 5,
-        phase_writing = 6,
-        phase_done = 7,
-    };
-
     struct PipelineControl
     {
         std::atomic<bool> *cancelled = nullptr;
-        std::atomic<int> *phase = nullptr;
-        std::atomic<int> *current = nullptr;
-        std::atomic<int> *total = nullptr;
 
         bool isCancelled() const
         {
             return cancelled && cancelled->load(std::memory_order_acquire);
-        }
-
-        void setPhase(int value, int current_value = 0, int total_value = 0) const
-        {
-            if (phase)
-                phase->store(value, std::memory_order_release);
-            setProgress(current_value, total_value);
-        }
-
-        void setProgress(int current_value, int total_value) const
-        {
-            if (current)
-                current->store(current_value, std::memory_order_release);
-            if (total)
-                total->store(total_value, std::memory_order_release);
         }
     };
 
@@ -109,7 +80,7 @@ namespace
         return buf;
     }
 
-    void set_result_message(qpdf_optimizer_result_v2 &result, std::string const &message)
+    void set_result_message(qpdf_optimizer_result &result, std::string const &message)
     {
         if (result.message != nullptr)
         {
@@ -122,7 +93,7 @@ namespace
         }
     }
 
-    void normalize_options(qpdf_optimizer_options_v2 &opts)
+    void normalize_options(qpdf_optimizer_options &opts)
     {
         if (opts.jpeg_quality == 0)
             opts.jpeg_quality = 75;
@@ -147,7 +118,7 @@ namespace
     }
 
     bool validate_options(
-        const qpdf_optimizer_options_v2 *opts,
+        const qpdf_optimizer_options *opts,
         std::string &reason)
     {
         if (!opts)
@@ -155,22 +126,22 @@ namespace
             reason = "Options pointer is null";
             return false;
         }
-        if (opts->struct_size < sizeof(qpdf_optimizer_options_v2))
+        if (opts->struct_size < sizeof(qpdf_optimizer_options))
         {
             reason = "Options ABI size mismatch: caller=" +
                      std::to_string(opts->struct_size) + ", native=" +
-                     std::to_string(sizeof(qpdf_optimizer_options_v2));
+                     std::to_string(sizeof(qpdf_optimizer_options));
             return false;
         }
-        if (opts->api_version != QPDF_OPT_OPTIONS_V2_VERSION)
+        if (opts->abi_version != QPDF_OPTIMIZER_ABI_VERSION)
         {
-            reason = "Options API version mismatch: caller=" +
-                     std::to_string(opts->api_version) + ", native=" +
-                     std::to_string(QPDF_OPT_OPTIONS_V2_VERSION);
+            reason = "Options ABI version mismatch: caller=" +
+                     std::to_string(opts->abi_version) + ", native=" +
+                     std::to_string(QPDF_OPTIMIZER_ABI_VERSION);
             return false;
         }
         if (opts->mode < QPDF_OPT_MODE_STRUCTURAL ||
-            opts->mode > QPDF_OPT_MODE_EXTREME_RASTER)
+            opts->mode > QPDF_OPT_MODE_IMAGE_OPTIMIZED)
         {
             reason = "Compression mode is out of range";
             return false;
@@ -212,7 +183,7 @@ namespace
 struct qpdf_optimizer_job
 {
     /* Options (copied by value) */
-    qpdf_optimizer_options_v2 opts;
+    qpdf_optimizer_options opts;
 
     /* File paths (stored for deferred run) */
     std::string input_path;
@@ -221,17 +192,11 @@ struct qpdf_optimizer_job
     /* Cancellation */
     std::atomic<bool> cancelled{false};
 
-    /* Progress */
-    std::atomic<int> phase_id{0};
-    std::atomic<int> progress_current{0};
-    std::atomic<int> progress_total{0};
-
     /* Result */
-    qpdf_optimizer_result_v2 result{};
+    qpdf_optimizer_result result{};
 
     /* Diagnostics accumulated during run */
     std::string diagnostics;
-    std::string warnings;
 };
 
 /* ── Internal: qpdf structural pass ──────────────────────────────────── */
@@ -242,9 +207,8 @@ namespace
     int run_qpdf_pass(
         char const *input_path,
         char const *output_path,
-        qpdf_optimizer_options_v2 const &opts,
-        std::string &diagnostics,
-        bool &was_cancelled)
+        qpdf_optimizer_options const &opts,
+        std::string &diagnostics)
     {
         std::string captured_output;
         try
@@ -289,8 +253,6 @@ namespace
 
             cfg->checkConfiguration();
 
-            if (was_cancelled)
-                return 3;
             job.run();
 
             auto const exit_code = job.getExitCode();
@@ -329,7 +291,7 @@ namespace
 
 } // anonymous namespace
 
-/* ── Core pipeline (used by both job API and direct v2 call) ──────── */
+/* ── Core optimization pipeline ─────────────────────────────────────── */
 
 namespace
 {
@@ -337,8 +299,8 @@ namespace
     int run_pipeline(
         const char *input_path,
         const char *output_path,
-        const qpdf_optimizer_options_v2 &opts,
-        qpdf_optimizer_result_v2 &result,
+        const qpdf_optimizer_options &opts,
+        qpdf_optimizer_result &result,
         std::string &diagnostics,
         PipelineControl *control = nullptr)
     {
@@ -355,15 +317,6 @@ namespace
             opts.downsample_images,
             opts.recompress_jpeg);
 
-        if (control)
-            control->setPhase(phase_opening);
-
-        if (opts.mode == QPDF_OPT_MODE_EXTREME_RASTER)
-        {
-            diagnostics = "EXTREME_RASTER mode is not yet implemented";
-            return 1;
-        }
-
         QPDF qpdf;
         try
         {
@@ -379,20 +332,12 @@ namespace
         if (stat(input_path, &st) == 0)
             result.original_bytes = st.st_size;
 
-        if (control)
-            control->setPhase(phase_analyzing);
-
         AnalysisResult analysis;
         std::string analysis_err;
         if (!PdfAnalyzer::analyze(
                 qpdf, opts.target_dpi, opts.dpi_threshold,
                 analysis, analysis_err,
-                control ? control->cancelled : nullptr,
-                [control](int32_t current, int32_t total)
-                {
-                    if (control)
-                        control->setProgress(current, total);
-                }))
+                control ? control->cancelled : nullptr))
         {
             if (control && control->isCancelled())
                 return 3;
@@ -445,10 +390,6 @@ namespace
 
         if (opts.mode == QPDF_OPT_MODE_IMAGE_OPTIMIZED)
         {
-            if (control)
-                control->setPhase(
-                    phase_processing_images, 0,
-                    static_cast<int>(analysis.images.size()));
             RewriteOptions rewrite_opts;
             rewrite_opts.jpeg_quality = opts.jpeg_quality;
             rewrite_opts.target_dpi = opts.target_dpi;
@@ -463,19 +404,13 @@ namespace
             rewrite_opts.downsample_images = opts.downsample_images != 0;
             rewrite_opts.convert_to_grayscale =
                 opts.convert_to_grayscale != 0;
-            rewrite_opts.deduplicate_images = false;
             rewrite_opts.preserve_transparency =
                 opts.preserve_transparency != 0;
 
             std::string rewrite_err;
             auto stats = PdfImageRewriter::rewriteImages(
                 qpdf, analysis, rewrite_opts, rewrite_err,
-                control ? control->cancelled : nullptr,
-                [control](int32_t current, int32_t total)
-                {
-                    if (control)
-                        control->setProgress(current, total);
-                });
+                control ? control->cancelled : nullptr);
             result.images_replaced = stats.images_replaced;
             result.images_skipped = stats.images_skipped;
             result.images_failed = stats.images_failed;
@@ -508,8 +443,6 @@ namespace
             return 3;
         }
 
-        if (control)
-            control->setPhase(phase_writing);
         std::string temp_path = std::string(output_path) + ".qpdf-intermediate";
         std::remove(temp_path.c_str());
         {
@@ -537,11 +470,9 @@ namespace
             return 3;
         }
 
-        if (control)
-            control->setPhase(phase_structural_cleanup);
         std::string struct_err;
-        bool was_cancelled = false;
-        int rc = run_qpdf_pass(temp_path.c_str(), output_path, opts, struct_err, was_cancelled);
+        int rc = run_qpdf_pass(
+            temp_path.c_str(), output_path, opts, struct_err);
         std::remove(temp_path.c_str());
 
         if (rc != 0)
@@ -594,10 +525,8 @@ namespace
             return 4;
         }
 
-        result.status = 0;
-        if (control)
-            control->setPhase(phase_done, 1, 1);
-        return 0;
+        result.status = QPDF_OPTIMIZER_STATUS_COMPLETED;
+        return QPDF_OPTIMIZER_STATUS_COMPLETED;
     }
 
 } // anonymous namespace
@@ -608,12 +537,12 @@ extern "C" qpdf_optimizer_job *
 qpdf_optimizer_create_job(
     const char *input_path,
     const char *output_path,
-    const qpdf_optimizer_options_v2 *options)
+    const qpdf_optimizer_options *options)
 {
     if (!input_path || !output_path || input_path[0] == '\0' || output_path[0] == '\0' || !options)
         return nullptr;
 
-    qpdf_optimizer_options_v2 normalized = *options;
+    qpdf_optimizer_options normalized = *options;
     normalize_options(normalized);
     std::string validation_error;
     if (!validate_options(&normalized, validation_error))
@@ -630,7 +559,7 @@ qpdf_optimizer_create_job(
     return job;
 }
 
-extern "C" const qpdf_optimizer_result_v2 *
+extern "C" const qpdf_optimizer_result *
 qpdf_optimizer_run(qpdf_optimizer_job *job)
 {
     if (!job)
@@ -643,29 +572,25 @@ qpdf_optimizer_run(qpdf_optimizer_job *job)
         res.message = nullptr;
     }
     std::memset(&res, 0, sizeof(res));
-    res.struct_size = sizeof(qpdf_optimizer_result_v2);
-    res.api_version = QPDF_OPT_RESULT_V2_VERSION;
+    res.struct_size = sizeof(qpdf_optimizer_result);
+    res.abi_version = QPDF_OPTIMIZER_ABI_VERSION;
 
     job->diagnostics.clear();
-    PipelineControl control{
-        &job->cancelled,
-        &job->phase_id,
-        &job->progress_current,
-        &job->progress_total};
+    PipelineControl control{&job->cancelled};
     int rc = run_pipeline(
         job->input_path.c_str(),
         job->output_path.c_str(),
         job->opts, res, job->diagnostics,
         &control);
 
-    if (rc == 3)
-        res.status = 3;
-    else if (rc == 4)
-        res.status = 4;
-    else if (rc != 0)
-        res.status = 2;
+    if (rc == QPDF_OPTIMIZER_STATUS_CANCELLED)
+        res.status = QPDF_OPTIMIZER_STATUS_CANCELLED;
+    else if (rc == QPDF_OPTIMIZER_STATUS_VALIDATION_FAILED)
+        res.status = QPDF_OPTIMIZER_STATUS_VALIDATION_FAILED;
+    else if (rc != QPDF_OPTIMIZER_STATUS_COMPLETED)
+        res.status = QPDF_OPTIMIZER_STATUS_PROCESSING_ERROR;
     else
-        res.status = 0;
+        res.status = QPDF_OPTIMIZER_STATUS_COMPLETED;
 
     if (!job->diagnostics.empty())
         set_result_message(res, job->diagnostics);
@@ -688,31 +613,6 @@ qpdf_optimizer_is_cancelled(const qpdf_optimizer_job *job)
 }
 
 extern "C" void
-qpdf_optimizer_get_progress(
-    const qpdf_optimizer_job *job,
-    int32_t *phase_id,
-    int32_t *current,
-    int32_t *total)
-{
-    if (!job)
-    {
-        if (phase_id)
-            *phase_id = 0;
-        if (current)
-            *current = 0;
-        if (total)
-            *total = 0;
-        return;
-    }
-    if (phase_id)
-        *phase_id = job->phase_id.load(std::memory_order_acquire);
-    if (current)
-        *current = job->progress_current.load(std::memory_order_acquire);
-    if (total)
-        *total = job->progress_total.load(std::memory_order_acquire);
-}
-
-extern "C" void
 qpdf_optimizer_destroy_job(qpdf_optimizer_job *job)
 {
     if (!job)
@@ -729,162 +629,6 @@ extern "C" const char *
 qpdf_optimizer_build_id(void)
 {
     return kOptimizerBuildId;
-}
-
-extern "C" const char *
-qpdf_optimizer_status_name(int32_t status)
-{
-    switch (status)
-    {
-    case 0:
-        return "completed";
-    case 1:
-        return "invalid_arguments";
-    case 2:
-        return "processing_error";
-    case 3:
-        return "cancelled";
-    case 4:
-        return "validation_failed";
-    default:
-        return "unknown";
-    }
-}
-
-/* ── V2 optimization pipeline ────────────────────────────────────────── */
-
-extern "C" int
-qpdf_optimizer_optimize_v2(
-    const char *input_path,
-    const char *output_path,
-    const qpdf_optimizer_options_v2 *options,
-    qpdf_optimizer_result_v2 *result,
-    char **error_message)
-{
-    if (error_message)
-        *error_message = nullptr;
-    if (!result)
-        return 1;
-    std::memset(result, 0, sizeof(*result));
-    result->struct_size = sizeof(qpdf_optimizer_result_v2);
-    result->api_version = QPDF_OPT_RESULT_V2_VERSION;
-
-    if (!input_path || !output_path ||
-        input_path[0] == '\0' || output_path[0] == '\0')
-    {
-        set_error(error_message, "Input and output paths are required");
-        result->status = 1;
-        return 1;
-    }
-    if (!options)
-    {
-        set_error(error_message, "Options pointer is null");
-        result->status = 1;
-        return 1;
-    }
-
-    qpdf_optimizer_options_v2 normalized = *options;
-    normalize_options(normalized);
-    std::string validation_error;
-    if (!validate_options(&normalized, validation_error))
-    {
-        set_error(error_message, validation_error);
-        result->status = 1;
-        return 1;
-    }
-
-    std::string diagnostics;
-    int rc = run_pipeline(input_path, output_path, normalized, *result, diagnostics);
-
-    if (rc == 3)
-        result->status = 3;
-    else if (rc == 4)
-        result->status = 4;
-    else if (rc != 0)
-        result->status = 2;
-    else
-        result->status = 0;
-
-    if (!diagnostics.empty())
-    {
-        set_result_message(*result, diagnostics);
-        set_error(error_message, diagnostics);
-    }
-    return rc;
-}
-
-/* ── Backward-compatible v1 wrapper ──────────────────────────────────── */
-
-extern "C" int
-qpdf_optimizer_optimize(
-    const char *input_path,
-    const char *output_path,
-    int jpeg_quality,
-    char **error_message)
-{
-    if (error_message)
-        *error_message = nullptr;
-
-    if (!input_path || !output_path || input_path[0] == '\0' ||
-        output_path[0] == '\0')
-    {
-        set_error(error_message, "Input and output paths are required");
-        return 1;
-    }
-    if (jpeg_quality < 1 || jpeg_quality > 100)
-    {
-        set_error(error_message, "JPEG quality must be between 1 and 100");
-        return 1;
-    }
-
-    qpdf_optimizer_options_v2 opts{};
-    opts.struct_size = sizeof(opts);
-    opts.api_version = QPDF_OPT_OPTIONS_V2_VERSION;
-    opts.mode = QPDF_OPT_MODE_STRUCTURAL;
-    opts.jpeg_quality = jpeg_quality;
-    opts.target_dpi = 144;
-    opts.dpi_threshold = 180;
-    opts.minimum_width = 64;
-    opts.minimum_height = 64;
-    opts.minimum_area = 4096;
-    opts.minimum_stream_bytes = 1024;
-    opts.downsample_images = 0;
-    opts.recompress_jpeg = 1;
-    opts.convert_to_grayscale = 0;
-    opts.strip_metadata = 0;
-    opts.strip_document_info = 0;
-    opts.remove_unused_resources = 0;
-    opts.deduplicate_images = 0;
-    opts.preserve_transparency = 1;
-    opts.maximum_decoded_pixels = 150'000'000;
-    opts.memory_budget_bytes = 512'000'000;
-
-    auto *job = qpdf_optimizer_create_job(input_path, output_path, &opts);
-    if (!job)
-    {
-        set_error(error_message, "Failed to create optimizer job");
-        return 1;
-    }
-
-    std::string diagnostics;
-    bool cancelled = false;
-    auto const rc = run_qpdf_pass(
-        input_path, output_path, opts, diagnostics, cancelled);
-
-    if (rc == 3)
-    {
-        qpdf_optimizer_destroy_job(job);
-        return 0;
-    }
-    if (rc == 2)
-    {
-        set_error(error_message, diagnostics);
-        qpdf_optimizer_destroy_job(job);
-        return 2;
-    }
-
-    qpdf_optimizer_destroy_job(job);
-    return 0;
 }
 
 extern "C" void

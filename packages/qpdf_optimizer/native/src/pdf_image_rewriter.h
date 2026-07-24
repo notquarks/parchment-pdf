@@ -36,7 +36,6 @@ struct RewriteOptions {
     bool recompress_jpeg = true;
     bool downsample_images = true;
     bool convert_to_grayscale = false;
-    bool deduplicate_images = false;
     bool preserve_transparency = true;
 };
 

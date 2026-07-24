@@ -3,28 +3,9 @@ import 'optimizer_stub.dart'
     if (dart.library.js_interop) 'optimizer_stub.dart'
     as implementation;
 
-
 enum QpdfOptimizerStatus { completed, unavailable, cancelled, failed }
 
-
-enum QpdfCompressionMode {
-      structural,
-
-        imageOptimized,
-
-        extremeRaster,
-}
-
-
-class QpdfOptimizerResult {
-  final QpdfOptimizerStatus status;
-  final String? message;
-
-  const QpdfOptimizerResult({required this.status, this.message});
-
-  bool get wasCompleted => status == QpdfOptimizerStatus.completed;
-}
-
+enum QpdfCompressionMode { structural, imageOptimized }
 
 class QpdfOptimizerOptions {
   final QpdfCompressionMode mode;
@@ -41,7 +22,6 @@ class QpdfOptimizerOptions {
   final bool stripMetadata;
   final bool stripDocumentInfo;
   final bool removeUnusedResources;
-  final bool deduplicateImages;
   final bool preserveTransparency;
   final int maximumDecodedPixels;
   final int memoryBudgetBytes;
@@ -61,26 +41,16 @@ class QpdfOptimizerOptions {
     this.stripMetadata = false,
     this.stripDocumentInfo = false,
     this.removeUnusedResources = false,
-    this.deduplicateImages = false,
     this.preserveTransparency = true,
     this.maximumDecodedPixels = 150000000,
     this.memoryBudgetBytes = 512000000,
   });
 
-    factory QpdfOptimizerOptions.fromQuality(int quality) {
-    final safeQuality = quality.clamp(1, 100).toInt();
-    return QpdfOptimizerOptions(
-      mode: QpdfCompressionMode.structural,
-      jpegQuality: safeQuality,
-      targetDpi: 144,
-      dpiThreshold: 180,
-      downsampleImages: false,
-      recompressJpeg: true,
-      deduplicateImages: false,
-    );
+  factory QpdfOptimizerOptions.fromQuality(int quality) {
+    return QpdfOptimizerOptions(jpegQuality: quality.clamp(1, 100).toInt());
   }
 
-    factory QpdfOptimizerOptions.imageOptimized(int quality) {
+  factory QpdfOptimizerOptions.imageOptimized(int quality) {
     final safeQuality = quality.clamp(1, 100).toInt();
     final (dpi, threshold) = switch (safeQuality) {
       >= 85 => (180, 225),
@@ -94,9 +64,6 @@ class QpdfOptimizerOptions {
       targetDpi: dpi,
       dpiThreshold: threshold,
       downsampleImages: true,
-      recompressJpeg: true,
-      deduplicateImages: false,
-      preserveTransparency: true,
     );
   }
 
@@ -105,24 +72,29 @@ class QpdfOptimizerOptions {
     int? jpegQuality,
     int? targetDpi,
     int? dpiThreshold,
+    int? minimumWidth,
+    int? minimumHeight,
+    int? minimumArea,
+    int? minimumStreamBytes,
     bool? downsampleImages,
     bool? recompressJpeg,
     bool? convertToGrayscale,
     bool? stripMetadata,
     bool? stripDocumentInfo,
     bool? removeUnusedResources,
-    bool? deduplicateImages,
     bool? preserveTransparency,
+    int? maximumDecodedPixels,
+    int? memoryBudgetBytes,
   }) {
     return QpdfOptimizerOptions(
       mode: mode ?? this.mode,
       jpegQuality: (jpegQuality ?? this.jpegQuality).clamp(1, 100).toInt(),
       targetDpi: targetDpi ?? this.targetDpi,
       dpiThreshold: dpiThreshold ?? this.dpiThreshold,
-      minimumWidth: minimumWidth,
-      minimumHeight: minimumHeight,
-      minimumArea: minimumArea,
-      minimumStreamBytes: minimumStreamBytes,
+      minimumWidth: minimumWidth ?? this.minimumWidth,
+      minimumHeight: minimumHeight ?? this.minimumHeight,
+      minimumArea: minimumArea ?? this.minimumArea,
+      minimumStreamBytes: minimumStreamBytes ?? this.minimumStreamBytes,
       downsampleImages: downsampleImages ?? this.downsampleImages,
       recompressJpeg: recompressJpeg ?? this.recompressJpeg,
       convertToGrayscale: convertToGrayscale ?? this.convertToGrayscale,
@@ -130,11 +102,9 @@ class QpdfOptimizerOptions {
       stripDocumentInfo: stripDocumentInfo ?? this.stripDocumentInfo,
       removeUnusedResources:
           removeUnusedResources ?? this.removeUnusedResources,
-      deduplicateImages: deduplicateImages ?? this.deduplicateImages,
-      preserveTransparency:
-          preserveTransparency ?? this.preserveTransparency,
-      maximumDecodedPixels: maximumDecodedPixels,
-      memoryBudgetBytes: memoryBudgetBytes,
+      preserveTransparency: preserveTransparency ?? this.preserveTransparency,
+      maximumDecodedPixels: maximumDecodedPixels ?? this.maximumDecodedPixels,
+      memoryBudgetBytes: memoryBudgetBytes ?? this.memoryBudgetBytes,
     );
   }
 
@@ -150,25 +120,24 @@ class QpdfOptimizerOptions {
       ')';
 }
 
-
-class QpdfOptimizerResultV2 {
+class QpdfOptimizerResult {
   final QpdfOptimizerStatus status;
   final String? message;
-
+  final int warningCount;
   final int pagesProcessed;
   final int imagesFound;
   final int imagesReplaced;
   final int imagesSkipped;
   final int imagesFailed;
-
   final int originalBytes;
   final int outputBytes;
   final int imageBytesBefore;
   final int imageBytesAfter;
 
-  const QpdfOptimizerResultV2({
+  const QpdfOptimizerResult({
     required this.status,
     this.message,
+    this.warningCount = 0,
     this.pagesProcessed = 0,
     this.imagesFound = 0,
     this.imagesReplaced = 0,
@@ -189,23 +158,14 @@ class QpdfOptimizerResultV2 {
 
   @override
   String toString() =>
-      'QpdfOptimizerResultV2('
+      'QpdfOptimizerResult('
       'status: ${status.name}, '
       'pages: $pagesProcessed, '
       'images: $imagesFound/$imagesReplaced/$imagesSkipped/$imagesFailed, '
       'size: ${_formatSize(originalBytes)} → ${_formatSize(outputBytes)} '
       '(${reductionPercent.toStringAsFixed(1)}%)'
       ')';
-
-  String _formatSize(int bytes) {
-    if (bytes < 1000) return '$bytes B';
-    if (bytes < 1000 * 1000) {
-      return '${(bytes / 1000).toStringAsFixed(1)} kB';
-    }
-    return '${(bytes / 1000000).toStringAsFixed(1)} MB';
-  }
 }
-
 
 class QpdfImageInfo {
   final int objectNumber;
@@ -232,7 +192,7 @@ class QpdfImageInfo {
 
   @override
   String toString() =>
-      'QpdfImageInfo(obj:$objectNumber, ${width}x${height}, '
+      'QpdfImageInfo(obj:$objectNumber, ${width}x$height, '
       'dpi:${maxDpi.toStringAsFixed(0)}, $filter/$colorSpace, '
       'processable:$processable)';
 }
@@ -256,52 +216,29 @@ class QpdfAnalysisResult {
     required this.images,
   });
 
-  int get processableCount => images.where((i) => i.processable).length;
+  int get processableCount => images.where((image) => image.processable).length;
 
   @override
   String toString() =>
       'QpdfAnalysisResult('
       'pages: $pageCount, images: $imageCount '
       '(processable: $processableCount, high-dpi: $highDpiCount), '
-      'imgBytes: ${_fmt(totalImageBytes)}, '
+      'imgBytes: ${_formatSize(totalImageBytes)}, '
       'encrypted: $isEncrypted, signed: $hasSignatures)';
-
-  String _fmt(int bytes) {
-    if (bytes < 1000) return '$bytes B';
-    if (bytes < 1000 * 1000) {
-      return '${(bytes / 1000).toStringAsFixed(1)} kB';
-    }
-    return '${(bytes / 1000000).toStringAsFixed(1)} MB';
-  }
 }
-
 
 class QpdfOptimizer {
   const QpdfOptimizer();
 
   String get buildId => implementation.buildId();
 
-    Future<QpdfOptimizerResult> optimize({
-    required String inputPath,
-    required String outputPath,
-    required int quality,
-    bool Function()? isCancelled,
-  }) {
-    return implementation.optimizeV1(
-      inputPath: inputPath,
-      outputPath: outputPath,
-      quality: quality,
-      isCancelled: isCancelled,
-    );
-  }
-
-    Future<QpdfOptimizerResultV2> optimizeV2({
+  Future<QpdfOptimizerResult> optimize({
     required String inputPath,
     required String outputPath,
     required QpdfOptimizerOptions options,
     bool Function()? isCancelled,
   }) {
-    return implementation.optimizeV2(
+    return implementation.optimize(
       inputPath: inputPath,
       outputPath: outputPath,
       options: options,
@@ -309,10 +246,18 @@ class QpdfOptimizer {
     );
   }
 
-    Future<QpdfAnalysisResult> analyzePdf(
+  Future<QpdfAnalysisResult> analyzePdf(
     String inputPath, {
     int dpiThreshold = 180,
   }) {
-    return implementation.analyzePdfAsync(inputPath, dpiThreshold: dpiThreshold);
+    return implementation.analyzePdf(inputPath, dpiThreshold: dpiThreshold);
   }
+}
+
+String _formatSize(int bytes) {
+  if (bytes < 1000) return '$bytes B';
+  if (bytes < 1000 * 1000) {
+    return '${(bytes / 1000).toStringAsFixed(1)} kB';
+  }
+  return '${(bytes / 1000000).toStringAsFixed(1)} MB';
 }

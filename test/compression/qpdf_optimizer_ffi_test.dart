@@ -6,9 +6,9 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:qpdf_optimizer/qpdf_optimizer.dart';
 
 void main() {
-  test('optimizes a PDF through the native FFI bridge', () async {
-    if (!Platform.isWindows && !Platform.isAndroid) return;
+  final nativeSupported = Platform.isWindows || Platform.isAndroid;
 
+  test('optimizes a PDF through the native FFI bridge', () async {
     final outputDirectory = await Directory.systemTemp.createTemp(
       'qpdf_optimizer_test_',
     );
@@ -20,10 +20,13 @@ void main() {
       final result = await const QpdfOptimizer().optimize(
         inputPath: input.absolute.path,
         outputPath: output.path,
-        quality: 75,
+        options: QpdfOptimizerOptions.fromQuality(75),
       );
 
       expect(result.status, QpdfOptimizerStatus.completed);
+      expect(result.pagesProcessed, 1);
+      expect(result.originalBytes, greaterThan(0));
+      expect(result.outputBytes, greaterThan(0));
       expect(await output.exists(), isTrue);
       expect(await output.length(), greaterThan(0));
       final bytes = await output.readAsBytes();
@@ -33,11 +36,9 @@ void main() {
         await outputDirectory.delete(recursive: true);
       }
     }
-  });
+  }, skip: !nativeSupported);
 
   test('returns native qpdf diagnostics for an invalid PDF', () async {
-    if (!Platform.isWindows && !Platform.isAndroid) return;
-
     final outputDirectory = await Directory.systemTemp.createTemp(
       'qpdf_optimizer_error_test_',
     );
@@ -49,7 +50,7 @@ void main() {
       final result = await const QpdfOptimizer().optimize(
         inputPath: input.path,
         outputPath: output.path,
-        quality: 75,
+        options: const QpdfOptimizerOptions(),
       );
 
       expect(result.status, QpdfOptimizerStatus.failed);
@@ -59,7 +60,21 @@ void main() {
         await outputDirectory.delete(recursive: true);
       }
     }
-  });
+  }, skip: !nativeSupported);
+
+  test(
+    'reports unavailable optimization on unsupported platforms',
+    () async {
+      final result = await const QpdfOptimizer().optimize(
+        inputPath: 'input.pdf',
+        outputPath: 'output.pdf',
+        options: const QpdfOptimizerOptions(),
+      );
+
+      expect(result.status, QpdfOptimizerStatus.unavailable);
+    },
+    skip: nativeSupported,
+  );
 }
 
 Future<void> _writePdf(File file) async {

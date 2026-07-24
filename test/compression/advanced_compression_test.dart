@@ -30,8 +30,7 @@ void main() {
           pageFormat: PdfPageFormat.a4,
           build: (context) => pw.Column(
             children: [
-              pw.Text('Page ${i + 1}',
-                  style: const pw.TextStyle(fontSize: 24)),
+              pw.Text('Page ${i + 1}', style: const pw.TextStyle(fontSize: 24)),
               pw.SizedBox(height: 20),
               pw.Text('Test content for compression. ' * 10),
             ],
@@ -157,19 +156,13 @@ void main() {
 
   group('CompressionResult', () {
     test('calculates reduction percent correctly', () {
-      const result = CompressionResult(
-        originalSize: 1000,
-        compressedSize: 500,
-      );
+      const result = CompressionResult(originalSize: 1000, compressedSize: 500);
       expect(result.reductionPercent, equals(50.0));
       expect(result.bytesReduced, equals(500));
     });
 
     test('handles zero original size', () {
-      const result = CompressionResult(
-        originalSize: 0,
-        compressedSize: 0,
-      );
+      const result = CompressionResult(originalSize: 0, compressedSize: 0);
       expect(result.reductionPercent, equals(0.0));
     });
   });
@@ -227,10 +220,7 @@ void main() {
     test('imageOptimized creates valid options', () {
       final options = qpdf.QpdfOptimizerOptions.imageOptimized(75);
       expect(options.jpegQuality, equals(75));
-      expect(
-        options.mode,
-        equals(qpdf.QpdfCompressionMode.imageOptimized),
-      );
+      expect(options.mode, equals(qpdf.QpdfCompressionMode.imageOptimized));
       expect(options.downsampleImages, isTrue);
     });
 
@@ -239,13 +229,47 @@ void main() {
         mode: qpdf.QpdfCompressionMode.imageOptimized,
         jpegQuality: 75,
         targetDpi: 144,
+        minimumWidth: 96,
+        minimumHeight: 80,
+        minimumArea: 7680,
+        minimumStreamBytes: 2048,
         convertToGrayscale: true,
+        stripMetadata: true,
+        stripDocumentInfo: true,
+        removeUnusedResources: true,
+        maximumDecodedPixels: 100000000,
+        memoryBudgetBytes: 256000000,
       );
 
       final copied = original.copyWith(jpegQuality: 50);
       expect(copied.jpegQuality, equals(50));
       expect(copied.mode, equals(qpdf.QpdfCompressionMode.imageOptimized));
       expect(copied.convertToGrayscale, isTrue);
+      expect(copied.minimumWidth, 96);
+      expect(copied.minimumHeight, 80);
+      expect(copied.minimumArea, 7680);
+      expect(copied.minimumStreamBytes, 2048);
+      expect(copied.stripMetadata, isTrue);
+      expect(copied.stripDocumentInfo, isTrue);
+      expect(copied.removeUnusedResources, isTrue);
+      expect(copied.maximumDecodedPixels, 100000000);
+      expect(copied.memoryBudgetBytes, 256000000);
+    });
+
+    test('rich result reports size reduction', () {
+      const result = qpdf.QpdfOptimizerResult(
+        status: qpdf.QpdfOptimizerStatus.completed,
+        warningCount: 1,
+        pagesProcessed: 2,
+        originalBytes: 1000,
+        outputBytes: 750,
+      );
+
+      expect(result.wasCompleted, isTrue);
+      expect(result.warningCount, 1);
+      expect(result.pagesProcessed, 2);
+      expect(result.bytesReduced, 250);
+      expect(result.reductionPercent, 25);
     });
   });
 

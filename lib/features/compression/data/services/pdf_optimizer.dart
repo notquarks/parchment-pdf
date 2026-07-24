@@ -57,8 +57,11 @@ class _QpdfFfiOptimizer implements PdfOptimizer {
       PdfCompressionMode.structural => qpdf.QpdfCompressionMode.structural,
       PdfCompressionMode.imageOptimized =>
         qpdf.QpdfCompressionMode.imageOptimized,
-      PdfCompressionMode.extremeRaster =>
-        qpdf.QpdfCompressionMode.extremeRaster,
+      PdfCompressionMode.extremeRaster => throw ArgumentError.value(
+        options.mode,
+        'options.mode',
+        'Extreme raster compression must use RasterCompressionService',
+      ),
     };
 
     final nativeOptions = qpdf.QpdfOptimizerOptions(
@@ -69,11 +72,13 @@ class _QpdfFfiOptimizer implements PdfOptimizer {
       downsampleImages: options.downscale,
       recompressJpeg: options.recompressJpeg,
       convertToGrayscale: options.convertToGrayscale,
-      deduplicateImages: false,
+      stripMetadata: options.stripMetadata,
       preserveTransparency: true,
     );
 
-    debugPrint('[PDF-COMPRESS] nativeBuild=${const qpdf.QpdfOptimizer().buildId}');
+    debugPrint(
+      '[PDF-COMPRESS] nativeBuild=${const qpdf.QpdfOptimizer().buildId}',
+    );
 
     debugPrint(
       '[PDF-COMPRESS] START '
@@ -87,7 +92,7 @@ class _QpdfFfiOptimizer implements PdfOptimizer {
       'recompressJpeg=${nativeOptions.recompressJpeg}',
     );
 
-    final result = await const qpdf.QpdfOptimizer().optimizeV2(
+    final result = await const qpdf.QpdfOptimizer().optimize(
       inputPath: inputPath,
       outputPath: outputPath,
       options: nativeOptions,
